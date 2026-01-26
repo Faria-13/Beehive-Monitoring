@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { supabase } from "./createClient";
+import SensorLineChart from "./components/sensorLineChart";
+
 
 const App1 = () => {
   const [users, setUsers] = useState([]);
@@ -22,6 +24,10 @@ const App1 = () => {
 
   return (
     <div style={{ padding: "1rem" }}>
+       <h2>Sensor 1</h2>
+      <SensorLineChart sensorId={41} />
+
+
       <h1>Beehive Users</h1>
 
       {users.length === 0 ? (
