@@ -1,13 +1,14 @@
 import { supabase } from "../createClient";
 
-export async function fetchSensorReadings(sensorId, limit = 50) {
+export async function fetchSensorReadingsByRange(sensorId, startISO, endISO) {
   const { data, error } = await supabase
     .from("sensor_readings")
-    .select("timestamp, value")
+    .select("timestamp, value, unit")
     .eq("sensor_id", sensorId)
     .eq("is_valid", true)
-    .order("timestamp", { ascending: true })
-    .limit(limit);
+    .gte("timestamp", startISO)
+    .lte("timestamp", endISO)
+    .order("timestamp", { ascending: true });
 
   if (error) throw error;
   return data ?? [];

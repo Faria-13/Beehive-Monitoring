@@ -24,7 +24,7 @@ const App1 = () => {
 
   return (
     <div style={{ padding: "1rem" }}>
-       <h2>Sensor 1</h2>
+       <h2>Sensors</h2>
       <SensorLineChart sensorId={41} />
 
 
