@@ -3,25 +3,6 @@ import { supabase } from "./createClient";
 import SensorLineChart from "./components/sensorLineChart";
 
 
-const App1 = () => {
-  const [users, setUsers] = useState([]);
-
-  useEffect(() => {
-    const fetchUsers = async () => {
-      const { data, error } = await supabase
-        .from("users")
-        .select("first_name, email");
-
-      if (error) {
-        console.error("Error fetching users:", error);
-      } else {
-        setUsers(data);
-      }
-    };
-
-    fetchUsers();
-  }, []);
-
   function App() {
   return (
     <div style={{ padding: "24px" }}>
@@ -33,6 +14,5 @@ const App1 = () => {
   );
 }
 
-};
 
-export default App1;
+export default App;
