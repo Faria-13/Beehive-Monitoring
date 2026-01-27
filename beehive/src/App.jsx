@@ -22,27 +22,17 @@ const App1 = () => {
     fetchUsers();
   }, []);
 
+  function App() {
   return (
-    <div style={{ padding: "1rem" }}>
-       <h2>Sensors</h2>
+    <div style={{ padding: "24px" }}>
+      <h1>Beehive Monitoring Dashboard</h1>
+
+      {/* IMPORTANT: sensorId must exist in DB */}
       <SensorLineChart sensorId={41} />
-
-
-      <h1>Beehive Users</h1>
-
-      {users.length === 0 ? (
-        <p>No users found</p>
-      ) : (
-        <ul>
-          {users.map((user, index) => (
-            <li key={index}>
-              <strong>{user.first_name}</strong> — {user.email}
-            </li>
-          ))}
-        </ul>
-      )}
     </div>
   );
+}
+
 };
 
 export default App1;
