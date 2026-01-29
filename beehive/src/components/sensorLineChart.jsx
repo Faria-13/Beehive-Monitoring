@@ -4,7 +4,6 @@ import Card from "@mui/material/Card";
 import CardContent from "@mui/material/CardContent";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
-import TextField from "@mui/material/TextField";
 
 import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
 import { DatePicker } from "@mui/x-date-pickers/DatePicker";
@@ -20,7 +19,7 @@ export default function SensorLineChart({ sensorId }) {
   const [startDate, setStartDate] = useState(defaultStart);
   const [endDate, setEndDate] = useState(defaultEnd);
 
-  const [readings, setReadings] = useState(null); 
+  const [readings, setReadings] = useState(null);
   const [error, setError] = useState(null);
 
   useEffect(() => {
@@ -30,17 +29,18 @@ export default function SensorLineChart({ sensorId }) {
       try {
         setError(null);
         setReadings(null);
-
         if (!startDate || !endDate) {
           setReadings([]);
           return;
         }
 
-        const startISO = startDate.startOf("day").toISOString();
-        const endISO = endDate.endOf("day").toISOString();
+        const safeStart = startDate.isAfter(endDate) ? endDate : startDate;
+        const safeEnd = endDate.isBefore(startDate) ? startDate : endDate;
+
+        const startISO = safeStart.startOf("day").toISOString();
+        const endISO = safeEnd.endOf("day").toISOString();
 
         const data = await fetchSensorReadingsByRange(sensorId, startISO, endISO);
-
         if (!cancelled) setReadings(data);
       } catch (e) {
         if (!cancelled) {
@@ -55,6 +55,56 @@ export default function SensorLineChart({ sensorId }) {
       cancelled = true;
     };
   }, [sensorId, startDate, endDate]);
+
+  const chartData = useMemo(() => {
+    if (readings === null) return null;
+
+    if (!startDate || !endDate) {
+      return { xData: [], yData: [], unit: "?" };
+    }
+
+    const safeStart = startDate.isAfter(endDate) ? endDate : startDate;
+    const safeEnd = endDate.isBefore(startDate) ? startDate : endDate;
+
+    const unit = readings.find((r) => r.unit)?.unit ?? "?";
+
+    const dayKeys = [];
+    let cursor = safeStart.startOf("day");
+    const last = safeEnd.startOf("day");
+    while (cursor.isBefore(last) || cursor.isSame(last, "day")) {
+      dayKeys.push(cursor.format("YYYY-MM-DD"));
+      cursor = cursor.add(1, "day");
+    }
+
+    const buckets = new Map();
+    for (const r of readings) {
+      const key = dayjs(r.timestamp).format("YYYY-MM-DD");
+      const val = Number(r.value);
+
+      const existing = buckets.get(key) ?? { sum: 0, count: 0 };
+      existing.sum += val;
+      existing.count += 1;
+      buckets.set(key, existing);
+    }
+
+    
+    const xData = dayKeys.map((k) => dayjs(k).toDate());
+    const yData = dayKeys.map((k) => {
+      const b = buckets.get(k);
+      if (!b || b.count === 0) return null;
+      return Math.round((b.sum / b.count) * 100) / 100;
+    });
+    console.log("dayKeys:", dayKeys);
+    console.log("yData raw:", yData);
+    console.log(
+      "yData precision:",
+      yData.map((v) => (v == null ? null : v.toString()))
+    );
+
+
+    return { xData, yData, unit };
+  }, [readings, startDate, endDate]);
+  
 
   return (
     <Card>
@@ -90,33 +140,32 @@ export default function SensorLineChart({ sensorId }) {
 
         {readings === null ? (
           <Typography>Loading…</Typography>
-        ) : readings.length === 0 ? (
+        ) : chartData && chartData.xData.length === 0 ? (
           <Typography>No readings found for this date range.</Typography>
         ) : (
-          (() => {
-            const unit = readings.find((r) => r.unit)?.unit ?? "?";
-            const xData = readings.map((r) => new Date(r.timestamp));
-            const yData = readings.map((r) => Number(r.value));
-
-            return (
-              <LineChart
-                xAxis={[
-                  {
-                    data: xData,
-                    scaleType: "time",
-                    label: "Time",
-                  },
-                ]}
-                series={[
-                  {
-                    data: yData,
-                    label: `Temperature (${unit})`,
-                  },
-                ]}
-                height={300}
-              />
-            );
-          })()
+          chartData && (
+            <LineChart
+              xAxis={[
+                {
+                  data: chartData.xData,
+                  scaleType: "time",
+                  label: "Days",
+              
+                  valueFormatter: (value) =>
+                    value == null ? "NaN" : dayjs(value).format("MMM D"),
+                },
+              ]}
+              series={[
+                {
+                  data: chartData.yData,
+                  label: `Daily Avg Temperature (${chartData.unit})`,
+                  valueFormatter: (value) =>
+                    value == null ? "NaN" : value.toFixed(2),
+                },
+              ]}
+              height={300}
+            />
+          )
         )}
       </CardContent>
     </Card>
