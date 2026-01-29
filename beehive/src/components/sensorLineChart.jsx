@@ -80,14 +80,13 @@ export default function SensorLineChart({ sensorId }) {
     for (const r of readings) {
       const key = dayjs(r.timestamp).format("YYYY-MM-DD");
       const val = Number(r.value);
-
+      console.log("yData raw:", val);
       const existing = buckets.get(key) ?? { sum: 0, count: 0 };
       existing.sum += val;
       existing.count += 1;
       buckets.set(key, existing);
     }
 
-    
     const xData = dayKeys.map((k) => dayjs(k).toDate());
     const yData = dayKeys.map((k) => {
       const b = buckets.get(k);
@@ -95,7 +94,7 @@ export default function SensorLineChart({ sensorId }) {
       return Math.round((b.sum / b.count) * 100) / 100;
     });
     console.log("dayKeys:", dayKeys);
-    console.log("yData raw:", yData);
+    
     console.log(
       "yData precision:",
       yData.map((v) => (v == null ? null : v.toString()))
