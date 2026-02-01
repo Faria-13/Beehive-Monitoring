@@ -13,14 +13,50 @@ import dayjs from "dayjs";
 import { fetchSensorReadingsByRange } from "../api/sensorReadings";
 
 export default function SensorLineChart({ sensorId }) {
+  const WINDOW_DAYS = 14;
+
   const defaultEnd = useMemo(() => dayjs(), []);
-  const defaultStart = useMemo(() => dayjs().subtract(14, "day"), []);
+  const defaultStart = useMemo(() => dayjs().subtract(WINDOW_DAYS, "day"), []);
 
   const [startDate, setStartDate] = useState(defaultStart);
   const [endDate, setEndDate] = useState(defaultEnd);
 
   const [readings, setReadings] = useState(null);
   const [error, setError] = useState(null);
+
+  const resetToDefaultWindow = () => {
+    const end = dayjs();
+    const start = end.subtract(WINDOW_DAYS, "day");
+    setStartDate(start);
+    setEndDate(end);
+  };
+
+  const handleStartChange = (v) => {
+    if (!v || !v.isValid()) return;
+
+    const proposedEnd = v.add(WINDOW_DAYS, "day");
+    const today = dayjs();
+
+    if (proposedEnd.isAfter(today, "day")) {
+      resetToDefaultWindow();
+      return;
+    }
+
+    setStartDate(v);
+    setEndDate(proposedEnd);
+  };
+
+  const handleEndChange = (v) => {
+    if (!v || !v.isValid()) return;
+
+    const today = dayjs();
+
+    const safeEnd = v.isAfter(today, "day") ? today : v;
+    const proposedStart = safeEnd.subtract(WINDOW_DAYS, "day");
+
+    setEndDate(safeEnd);
+    setStartDate(proposedStart);
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -29,6 +65,7 @@ export default function SensorLineChart({ sensorId }) {
       try {
         setError(null);
         setReadings(null);
+
         if (!startDate || !endDate) {
           setReadings([]);
           return;
@@ -93,17 +130,15 @@ export default function SensorLineChart({ sensorId }) {
       if (!b || b.count === 0) return null;
       return Math.round((b.sum / b.count) * 100) / 100;
     });
+
     console.log("dayKeys:", dayKeys);
-    
     console.log(
       "yData precision:",
       yData.map((v) => (v == null ? null : v.toString()))
     );
 
-
     return { xData, yData, unit };
   }, [readings, startDate, endDate]);
-  
 
   return (
     <Card>
@@ -117,15 +152,17 @@ export default function SensorLineChart({ sensorId }) {
             <DatePicker
               label="Start date"
               value={startDate}
-              onChange={(v) => setStartDate(v)}
+              onChange={handleStartChange}
               disableFuture
+              maxDate={dayjs().subtract(WINDOW_DAYS, "day")}
               slotProps={{ textField: { size: "small" } }}
             />
             <DatePicker
               label="End date"
               value={endDate}
-              onChange={(v) => setEndDate(v)}
+              onChange={handleEndChange}
               disableFuture
+              maxDate={dayjs()}
               slotProps={{ textField: { size: "small" } }}
             />
           </Stack>
@@ -149,7 +186,6 @@ export default function SensorLineChart({ sensorId }) {
                   data: chartData.xData,
                   scaleType: "time",
                   label: "Days",
-              
                   valueFormatter: (value) =>
                     value == null ? "NaN" : dayjs(value).format("MMM D"),
                 },
