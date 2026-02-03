@@ -13,3 +13,14 @@ export async function fetchSensorReadingsByRange(sensorId, startISO, endISO) {
   if (error) throw error;
   return data ?? [];
 }
+
+export async function fetchSensorMeta(sensorId) {
+  const { data, error } = await supabase
+    .from("sensors")
+    .select("sensor_type")
+    .eq("sensor_id", sensorId)
+    .single();
+
+  if (error) throw error;
+  return data;
+}

@@ -11,6 +11,7 @@ import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
 import dayjs from "dayjs";
 
 import { fetchSensorReadingsByRange } from "../api/sensorReadings";
+import { fetchSensorMeta } from "../api/sensorReadings";
 
 export default function SensorLineChart({ sensorId }) {
   const WINDOW_DAYS = 14;
@@ -23,6 +24,8 @@ export default function SensorLineChart({ sensorId }) {
 
   const [readings, setReadings] = useState(null);
   const [error, setError] = useState(null);
+
+  const [sensorType, setSensorType] = useState("Sensor");   
 
   const resetToDefaultWindow = () => {
     const end = dayjs();
@@ -57,6 +60,32 @@ export default function SensorLineChart({ sensorId }) {
     setEndDate(safeEnd);
     setStartDate(proposedStart);
   };
+
+  useEffect(() => {
+  let cancelled = false;
+
+  async function loadSensorMeta() {
+    try {
+      const meta = await fetchSensorMeta(sensorId);
+      if (!cancelled && meta?.sensor_type) {
+        setSensorType(meta.sensor_type);
+      }
+    } catch (e) {
+      if (!cancelled) {
+        setSensorType("Sensor");
+      }
+    }
+  }
+
+  if (sensorId) {
+    loadSensorMeta();
+  }
+
+  return () => {
+    cancelled = true;
+  };
+}, [sensorId]);
+
 
   useEffect(() => {
     let cancelled = false;
@@ -144,7 +173,7 @@ export default function SensorLineChart({ sensorId }) {
     <Card>
       <CardContent>
         <Typography variant="h6" gutterBottom>
-          Temperature Sensor (ID: {sensorId})
+           {sensorType} Sensor (ID: {sensorId})
         </Typography>
 
         <LocalizationProvider dateAdapter={AdapterDayjs}>
@@ -190,10 +219,17 @@ export default function SensorLineChart({ sensorId }) {
                     value == null ? "NaN" : dayjs(value).format("MMM D"),
                 },
               ]}
+               yAxis={[
+                {
+                  label: chartData.unit ? `Value (${chartData.unit})` : "Value",
+                  valueFormatter: (value) =>
+                    value == null ? "NaN" : value.toFixed(2),
+                },
+              ]}
               series={[
                 {
                   data: chartData.yData,
-                  label: `Daily Avg Temperature (${chartData.unit})`,
+                  label: `Daily Avg ${sensorType} (${chartData.unit})`,
                   valueFormatter: (value) =>
                     value == null ? "NaN" : value.toFixed(2),
                 },
