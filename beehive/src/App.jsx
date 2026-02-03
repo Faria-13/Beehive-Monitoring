@@ -5,6 +5,8 @@ import Temperature from "./pages/Temperature";
 import Humidity from "./pages/Humidity";
 import Weight from "./pages/Weight";
 import TopNav from "./components/topNav";
+import Carbon from "./pages/Carbon";
+import Volume from "./pages/Volume";
 
   function App() {
   return (
