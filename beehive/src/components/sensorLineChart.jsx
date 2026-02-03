@@ -221,7 +221,7 @@ export default function SensorLineChart({ sensorId }) {
               ]}
                yAxis={[
                 {
-                  label: chartData.unit ? `Value (${chartData.unit})` : "Value",
+                  label: chartData.unit || "",
                   valueFormatter: (value) =>
                     value == null ? "NaN" : value.toFixed(2),
                 },
