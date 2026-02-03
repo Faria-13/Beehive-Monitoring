@@ -3,6 +3,7 @@ import { supabase } from "./createClient";
 import Temperature from "./pages/Temperature";
 import Humidity from "./pages/Humidity";
 import Weight from "./pages/Weight";
+import TopNav from "./components/topNav";
 
   function App() {
   return (
