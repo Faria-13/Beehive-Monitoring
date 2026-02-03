@@ -1,5 +1,7 @@
-import SensorLineChart from "../components/sensorLineChart";
+import React from "react";
+import SensorLineChart from "../components/SensorLineChart";
 
 export default function Temperature() {
-  return <SensorLineChart sensorId={41} />;
+  // sensorId 41 = hive temperature
+  return <SensorLineChart sensorId={41} showLocalWeather={true} />;
 }
