@@ -1,3 +1,3 @@
 export default function Weight() {
-  return <h2>Weight Dashboard (coming soon)</h2>;
+  return <SensorLineChart sensorId={44} />;
 }
