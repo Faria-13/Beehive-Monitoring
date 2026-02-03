@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { supabase } from "./createClient";
+import { Routes, Route } from "react-router-dom";
 import Temperature from "./pages/Temperature";
 import Humidity from "./pages/Humidity";
 import Weight from "./pages/Weight";
