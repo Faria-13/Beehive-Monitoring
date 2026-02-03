@@ -19,7 +19,7 @@ export default function TopNav() {
           <Button color="inherit" component={RouterLink} to="/weight">
             Weight
           </Button>
-          <Button color="inherit" component={RouterLink} to="/co2">
+          <Button color="inherit" component={RouterLink} to="/carbon">
             Co2
           </Button>
           <Button color="inherit" component={RouterLink} to="/volume">

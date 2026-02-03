@@ -16,6 +16,8 @@ import TopNav from "./components/topNav";
           <Route path="/" element={<Temperature />} />
           <Route path="/humidity" element={<Humidity />} />
           <Route path="/weight" element={<Weight />} />
+          <Route path="/carbon" element={<Carbon />} />
+          <Route path="/volume" element={<Volume />} />
         </Routes>
       </div>
     </>
