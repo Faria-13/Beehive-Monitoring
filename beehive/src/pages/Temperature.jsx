@@ -1,5 +1,5 @@
 import React from "react";
-import SensorLineChart from "../components/SensorLineChart";
+import SensorLineChart from "../components/sensorLineChart";
 
 export default function Temperature() {
   // sensorId 41 = hive temperature
