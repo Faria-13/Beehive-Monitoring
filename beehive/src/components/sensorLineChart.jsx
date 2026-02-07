@@ -11,7 +11,7 @@ import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
 import dayjs from "dayjs";
 
 import { fetchSensorReadingsByRange, fetchSensorMeta } from "../api/sensorReadings";
-import { fetchWeatherByRange } from "../api/weather"; // NEW
+import { fetchWeatherByRange } from "../api/weather";
 
 export default function SensorLineChart({ sensorId, showLocalWeather = false }) {
   const WINDOW_DAYS = 14;
@@ -155,12 +155,12 @@ export default function SensorLineChart({ sensorId, showLocalWeather = false }) 
     const unit = readings.find((r) => r.unit)?.unit ?? "?";
 
     // Prepare weather data if available
-    let weatherYData = null;
+    let weatherYData = dayKeys.map(() => null);
     if (showLocalWeather && weatherReadings) {
       const weatherBuckets = new Map();
       for (const w of weatherReadings) {
         const key = dayjs(w.timestamp).format("YYYY-MM-DD");
-        const val = Number(w.temperature);
+        const val = Number(w.temp_c);
         const existing = weatherBuckets.get(key) ?? { sum: 0, count: 0 };
         existing.sum += val;
         existing.count += 1;
@@ -176,6 +176,13 @@ export default function SensorLineChart({ sensorId, showLocalWeather = false }) 
 
     return { xData, yData, weatherYData, unit };
   }, [readings, weatherReadings, startDate, endDate, showLocalWeather]);
+  const isReady =
+  chartData &&
+  chartData.xData.length > 0 &&
+  chartData.yData.length === chartData.xData.length &&
+  (!showLocalWeather ||
+    (chartData.weatherYData &&
+      chartData.weatherYData.length === chartData.xData.length));
 
   return (
     <Card>
@@ -215,6 +222,8 @@ export default function SensorLineChart({ sensorId, showLocalWeather = false }) 
           <Typography>Loading…</Typography>
         ) : chartData && chartData.xData.length === 0 ? (
           <Typography>No readings found for this date range.</Typography>
+        ) : !isReady ? (
+            <Typography>Preparing chart…</Typography>
         ) : (
           chartData && (
             <LineChart
@@ -237,22 +246,22 @@ export default function SensorLineChart({ sensorId, showLocalWeather = false }) 
               ]}
               series={[
                 {
+                  id: "hive",
                   data: chartData.yData,
                   label: `Hive ${sensorType} (${chartData.unit})`,
                   valueFormatter: (value) =>
                     value == null ? "NaN" : value.toFixed(2),
                   color: "orange",
                 },
-                showLocalWeather && chartData.weatherYData
-                  ? {
-                      data: chartData.weatherYData,
-                      label: `Local Weather (${chartData.unit})`,
-                      valueFormatter: (value) =>
-                        value == null ? "NaN" : value.toFixed(2),
-                      color: "blue",
-                    }
-                  : null,
-              ].filter(Boolean)}
+                {
+                  id: "weather",
+                  data: showLocalWeather ? chartData.weatherYData : chartData.weatherYData.map(() => null),
+                  label: "Local Weather (°C)",
+                  valueFormatter: (value) =>
+                    value == null ? "NaN" : value.toFixed(2),
+                  color: "blue",
+                },
+              ]}
               height={300}
             />
 
