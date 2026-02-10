@@ -13,26 +13,26 @@ import dayjs from "dayjs";
 import { fetchSensorReadingsByRange, fetchSensorMeta } from "../api/sensorReadings";
 import { fetchWeatherByRange } from "../api/weather";
 
-export default function SensorLineChart({ sensorId, showLocalWeather = false }) {
+export default function SensorLineChartControlled({
+  sensorId,
+  showLocalWeather = false,
+  startDate,
+  endDate,
+  onStartDateChange,
+  onEndDateChange,
+}) {
   const WINDOW_DAYS = 14;
 
-  const defaultEnd = useMemo(() => dayjs(), []);
-  const defaultStart = useMemo(() => dayjs().subtract(WINDOW_DAYS, "day"), []);
-
-  const [startDate, setStartDate] = useState(defaultStart);
-  const [endDate, setEndDate] = useState(defaultEnd);
-
   const [readings, setReadings] = useState(null);
-  const [weatherReadings, setWeatherReadings] = useState(null); // NEW
+  const [weatherReadings, setWeatherReadings] = useState(null);
   const [error, setError] = useState(null);
-
   const [sensorType, setSensorType] = useState("Sensor");
 
   const resetToDefaultWindow = () => {
     const end = dayjs();
     const start = end.subtract(WINDOW_DAYS, "day");
-    setStartDate(start);
-    setEndDate(end);
+    onStartDateChange(start);
+    onEndDateChange(end);
   };
 
   const handleStartChange = (v) => {
@@ -46,8 +46,8 @@ export default function SensorLineChart({ sensorId, showLocalWeather = false }) 
       return;
     }
 
-    setStartDate(v);
-    setEndDate(proposedEnd);
+    onStartDateChange(v);
+    onEndDateChange(proposedEnd);
   };
 
   const handleEndChange = (v) => {
@@ -57,11 +57,10 @@ export default function SensorLineChart({ sensorId, showLocalWeather = false }) 
     const safeEnd = v.isAfter(today, "day") ? today : v;
     const proposedStart = safeEnd.subtract(WINDOW_DAYS, "day");
 
-    setEndDate(safeEnd);
-    setStartDate(proposedStart);
+    onEndDateChange(safeEnd);
+    onStartDateChange(proposedStart);
   };
 
-  // Fetch sensor meta
   useEffect(() => {
     let cancelled = false;
 
@@ -69,16 +68,17 @@ export default function SensorLineChart({ sensorId, showLocalWeather = false }) 
       try {
         const meta = await fetchSensorMeta(sensorId);
         if (!cancelled && meta?.sensor_type) setSensorType(meta.sensor_type);
-      } catch (e) {
+      } catch {
         if (!cancelled) setSensorType("Sensor");
       }
     }
 
     if (sensorId) loadSensorMeta();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [sensorId]);
 
-  // Fetch readings AND weather
   useEffect(() => {
     let cancelled = false;
 
@@ -86,7 +86,7 @@ export default function SensorLineChart({ sensorId, showLocalWeather = false }) 
       try {
         setError(null);
         setReadings(null);
-        setWeatherReadings(null); // NEW
+        setWeatherReadings(null);
 
         if (!startDate || !endDate) {
           setReadings([]);
@@ -117,12 +117,14 @@ export default function SensorLineChart({ sensorId, showLocalWeather = false }) 
     }
 
     load();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [sensorId, startDate, endDate, showLocalWeather]);
 
-  // Prepare chart data
   const chartData = useMemo(() => {
     if (readings === null) return null;
+    if (!startDate || !endDate) return { xData: [], yData: [], weatherYData: [], unit: "" };
 
     const safeStart = startDate.isAfter(endDate) ? endDate : startDate;
     const safeEnd = endDate.isBefore(startDate) ? startDate : endDate;
@@ -139,6 +141,7 @@ export default function SensorLineChart({ sensorId, showLocalWeather = false }) 
     for (const r of readings) {
       const key = dayjs(r.timestamp).format("YYYY-MM-DD");
       const val = Number(r.value);
+      if (!Number.isFinite(val)) continue;
       const existing = buckets.get(key) ?? { sum: 0, count: 0 };
       existing.sum += val;
       existing.count += 1;
@@ -154,13 +157,13 @@ export default function SensorLineChart({ sensorId, showLocalWeather = false }) 
 
     const unit = readings.find((r) => r.unit)?.unit ?? "?";
 
-    // Prepare weather data if available
     let weatherYData = dayKeys.map(() => null);
     if (showLocalWeather && weatherReadings) {
       const weatherBuckets = new Map();
       for (const w of weatherReadings) {
         const key = dayjs(w.timestamp).format("YYYY-MM-DD");
         const val = Number(w.temp_c);
+        if (!Number.isFinite(val)) continue;
         const existing = weatherBuckets.get(key) ?? { sum: 0, count: 0 };
         existing.sum += val;
         existing.count += 1;
@@ -176,17 +179,24 @@ export default function SensorLineChart({ sensorId, showLocalWeather = false }) 
 
     return { xData, yData, weatherYData, unit };
   }, [readings, weatherReadings, startDate, endDate, showLocalWeather]);
+
   const isReady =
-  chartData &&
-  chartData.xData.length > 0 &&
-  chartData.yData.length === chartData.xData.length &&
-  (!showLocalWeather ||
-    (chartData.weatherYData &&
-      chartData.weatherYData.length === chartData.xData.length));
+    chartData &&
+    chartData.xData.length > 0 &&
+    chartData.yData.length === chartData.xData.length &&
+    (!showLocalWeather ||
+      (chartData.weatherYData && chartData.weatherYData.length === chartData.xData.length));
 
   return (
-    <Card>
-      <CardContent>
+    <Card
+      sx={{
+        backgroundColor: "var(--bg)",
+        border: "2px solid var(--outline)",
+        boxShadow: "none",
+        height: "100%",
+      }}
+    >
+      <CardContent sx={{ backgroundColor: "var(--bg)" }}>
         <Typography variant="h6" gutterBottom>
           {sensorType} Sensor (ID: {sensorId})
         </Typography>
@@ -223,25 +233,27 @@ export default function SensorLineChart({ sensorId, showLocalWeather = false }) 
         ) : chartData && chartData.xData.length === 0 ? (
           <Typography>No readings found for this date range.</Typography>
         ) : !isReady ? (
-            <Typography>Preparing chart…</Typography>
+          <Typography>Preparing chart…</Typography>
         ) : (
-          chartData && (
+          <div className="chartFrame">
             <LineChart
               legend={{ hidden: false }}
+              sx={{
+                backgroundColor: "transparent",
+                "& .MuiChartsSurface-root": { backgroundColor: "transparent" },
+              }}
               xAxis={[
                 {
                   data: chartData.xData,
                   scaleType: "time",
                   label: "Days",
-                  valueFormatter: (value) =>
-                    value == null ? "NaN" : dayjs(value).format("MMM D"),
+                  valueFormatter: (value) => (value == null ? "NaN" : dayjs(value).format("MMM D")),
                 },
               ]}
               yAxis={[
                 {
                   label: chartData.unit || "",
-                  valueFormatter: (value) =>
-                    value == null ? "NaN" : value.toFixed(2),
+                  valueFormatter: (value) => (value == null ? "NaN" : value.toFixed(2)),
                 },
               ]}
               series={[
@@ -249,23 +261,20 @@ export default function SensorLineChart({ sensorId, showLocalWeather = false }) 
                   id: "hive",
                   data: chartData.yData,
                   label: `Hive ${sensorType} (${chartData.unit})`,
-                  valueFormatter: (value) =>
-                    value == null ? "NaN" : value.toFixed(2),
-                  color: "orange",
+                  valueFormatter: (value) => (value == null ? "NaN" : value.toFixed(2)),
+                  color: "#FE9805",
                 },
                 {
                   id: "weather",
                   data: showLocalWeather ? chartData.weatherYData : chartData.weatherYData.map(() => null),
                   label: "Local Weather (°C)",
-                  valueFormatter: (value) =>
-                    value == null ? "NaN" : value.toFixed(2),
-                  color: "blue",
+                  valueFormatter: (value) => (value == null ? "NaN" : value.toFixed(2)),
+                  color: "#FE5C05",
                 },
               ]}
               height={300}
             />
-
-          )
+          </div>
         )}
       </CardContent>
     </Card>
