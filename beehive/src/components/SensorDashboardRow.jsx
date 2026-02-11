@@ -35,7 +35,7 @@ export default function SensorDashboardRow({
   };
 
   return (
-    <Stack direction={{ xs: "column", md: "row" }} spacing={2} alignItems="stretch">
+    <Stack direction={{ xs: "column", md: "row" }} spacing={3} alignItems="stretch">
       <Box sx={{ width: { md: "25%" }, flexShrink: 0, minWidth: 260 }}>
         <SensorAveragesCard sensorIds={sensorIds} startDate={startDate} endDate={endDate} />
       </Box>

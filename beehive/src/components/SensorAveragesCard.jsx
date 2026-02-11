@@ -96,6 +96,7 @@ export default function SensorAveragesCard({ sensorIds = [], startDate, endDate 
           height: "100%",
           display: "flex",
           flexDirection: "column",
+          pb: 2,
         }}
       >
         <Typography variant="h3" align="center" sx={{ mb: 4 }}>
@@ -113,7 +114,7 @@ export default function SensorAveragesCard({ sensorIds = [], startDate, endDate 
         ) : rows.length === 0 ? (
           <Typography>No sensors or no date range selected.</Typography>
         ) : (
-          <Stack sx={{ flex: 1, justifyContent: "space-between" }}>
+          <Stack sx={{ flex: 1, gap: 6.25, pt: 0.5 }}>
             {rows.map((r) => (
               <Stack
                 key={r.sensorId}
@@ -122,10 +123,15 @@ export default function SensorAveragesCard({ sensorIds = [], startDate, endDate 
                 sx={{
                   width: "100%",
                   justifyContent: "space-between",
-                  gap: 2,
+                  gap: 3,
                 }}
               >
-                <Typography variant="body1" sx={{ pr: 2, flexShrink: 0 }}>
+                <Typography variant="body1" sx={{ 
+                  pr: 2, 
+                  flexShrink: 0, 
+                  fontWeight: 600,
+                  textTransform: "capitalize",
+                  }}>
                   {r.sensorType}:
                 </Typography>
 
