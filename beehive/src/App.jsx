@@ -4,14 +4,14 @@ import { Routes, Route } from "react-router-dom";
 import Temperature from "./pages/Temperature";
 import Humidity from "./pages/Humidity";
 import Weight from "./pages/Weight";
-import TopNav from "./components/topNav";
+import WebsiteNav from "./components/topNav";
 import Carbon from "./pages/Carbon";
 import Volume from "./pages/Volume";
 
-  function App() {
+function App() {
   return (
     <>
-      <TopNav />
+      <WebsiteNav />
 
       <div style={{ padding: "24px" }}>
         <Routes>
@@ -25,6 +25,5 @@ import Volume from "./pages/Volume";
     </>
   );
 }
-
 
 export default App;
