@@ -4,6 +4,7 @@ import Card from "@mui/material/Card";
 import CardContent from "@mui/material/CardContent";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
+import Button from "@mui/material/Button";
 
 import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
 import { DatePicker } from "@mui/x-date-pickers/DatePicker";
@@ -15,6 +16,8 @@ import { fetchWeatherByRange } from "../api/weather";
 
 export default function SensorLineChartControlled({
   sensorId,
+  sensorOptions = [],
+  onSensorChange,
   showLocalWeather = false,
   startDate,
   endDate,
@@ -197,6 +200,44 @@ export default function SensorLineChartControlled({
       }}
     >
       <CardContent sx={{ backgroundColor: "var(--bg)" }}>
+        {sensorOptions.length > 0 && (
+          <Stack
+            direction="row"
+            spacing={3}
+            justifyContent="center"
+            alignItems="center"
+            sx={{ mb: 1, flexWrap: "wrap" }}
+          >
+            {sensorOptions.map((opt) => {
+              const isActive = opt.id === sensorId;
+              const canClick = typeof onSensorChange === "function";
+
+              return (
+                <Button
+                  key={opt.id}
+                  variant="text"
+                  disableRipple
+                  onClick={() => {
+                    if (canClick) onSensorChange(opt.id);
+                  }}
+                  sx={{
+                    textTransform: "none",
+                    minWidth: 0,
+                    px: 0.5,
+                    py: 0.25,
+                    fontWeight: isActive ? 700 : 400,
+                    textDecoration: isActive ? "underline" : "none",
+                    textUnderlineOffset: "6px",
+                    opacity: canClick || isActive ? 1 : 0.6,
+                  }}
+                >
+                  {opt.label}
+                </Button>
+              );
+            })}
+          </Stack>
+        )}
+
         <Typography variant="h6" gutterBottom>
           {sensorType} Sensor (ID: {sensorId})
         </Typography>

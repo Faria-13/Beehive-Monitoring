@@ -29,7 +29,7 @@ const theme = createTheme({
     fontFamily: `"Inter", system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif`,
     h1: { fontFamily: `"Poppins", sans-serif`, fontWeight: 500, fontSize: "40px" },
     h2: { fontFamily: `"Poppins", sans-serif`, fontWeight: 700, fontSize: "32px" },
-    h3: { fontFamily: `"Inter", sans-serif`, fontWeight: 500, fontSize: "25px" },
+    h3: { fontFamily: `"Inter", sans-serif`, fontWeight: 500, fontSize: "20px" },
     h4: { fontFamily: `"Inter", sans-serif`, fontWeight: 500, fontSize: "20px" },
     body1: { fontFamily: `"Inter", sans-serif`, fontWeight: 400, fontSize: "18px" },
     caption: { fontFamily: `"Inter", sans-serif`, fontWeight: 300, fontSize: "15px", color: COLORS.caption },

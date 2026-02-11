@@ -59,13 +59,7 @@ export default function SensorAveragesCard({ sensorIds = [], startDate, endDate 
 
             const avg = count === 0 ? null : Math.round((sum / count) * 100) / 100;
 
-            return {
-              sensorId: id,
-              sensorType,
-              avg,
-              unit,
-              count,
-            };
+            return { sensorId: id, sensorType, avg, unit, count };
           })
         );
 
@@ -88,53 +82,61 @@ export default function SensorAveragesCard({ sensorIds = [], startDate, endDate 
   }, [sensorIds, startDate, endDate]);
 
   return (
-  <Card
-    sx={{
-      backgroundColor: "var(--bg)",
-      border: "2px solid var(--outline)",
-      boxShadow: "none",
-      height: "100%",
-    }}
-  >
-    <CardContent
+    <Card
       sx={{
         backgroundColor: "var(--bg)",
+        border: "2px solid var(--outline)",
+        boxShadow: "none",
         height: "100%",
-        display: "flex",
-        flexDirection: "column",
       }}
     >
-      <Typography variant="h3" align="center" sx={{ mb: 2 }}>
-        Sensor Averages From {labelRange}
-      </Typography>
-
-      {error && (
-        <Typography color="error" sx={{ mb: 2 }}>
-          Error: {error}
+      <CardContent
+        sx={{
+          backgroundColor: "var(--bg)",
+          height: "100%",
+          display: "flex",
+          flexDirection: "column",
+        }}
+      >
+        <Typography variant="h3" align="center" sx={{ mb: 4 }}>
+          Sensor Averages From {labelRange}
         </Typography>
-      )}
 
-      {rows === null ? (
-        <Typography>Loading…</Typography>
-      ) : rows.length === 0 ? (
-        <Typography>No sensors or no date range selected.</Typography>
-      ) : (
-        <Stack
-          sx={{
-            flex: 1,
-            justifyContent: "space-between",
-          }}
-        >
-          {rows.map((r) => (
-            <Typography key={r.sensorId} variant="body1">
-              {r.sensorType}:{" "}
-              {r.avg === null ? "No data" : `${r.avg}${r.unit ? ` ${r.unit}` : ""}`}
-            </Typography>
-          ))}
-        </Stack>
-      )}
-    </CardContent>
-  </Card>
-);
+        {error && (
+          <Typography color="error" sx={{ mb: 2 }}>
+            Error: {error}
+          </Typography>
+        )}
 
+        {rows === null ? (
+          <Typography>Loading…</Typography>
+        ) : rows.length === 0 ? (
+          <Typography>No sensors or no date range selected.</Typography>
+        ) : (
+          <Stack sx={{ flex: 1, justifyContent: "space-between" }}>
+            {rows.map((r) => (
+              <Stack
+                key={r.sensorId}
+                direction="row"
+                alignItems="baseline"
+                sx={{
+                  width: "100%",
+                  justifyContent: "space-between",
+                  gap: 2,
+                }}
+              >
+                <Typography variant="body1" sx={{ pr: 2, flexShrink: 0 }}>
+                  {r.sensorType}:
+                </Typography>
+
+                <Typography variant="body1" sx={{ textAlign: "right" }}>
+                  {r.avg === null ? "No data" : `${r.avg}${r.unit ?? ""}`}
+                </Typography>
+              </Stack>
+            ))}
+          </Stack>
+        )}
+      </CardContent>
+    </Card>
+  );
 }
