@@ -132,7 +132,7 @@ export default function SensorLineChart({ sensorId, showLocalWeather = false }) 
     // Weather data
     let weatherYData = [];
     if (showLocalWeather && weatherReadings) {
-      weatherYData = weatherReadings.map(w => Number(w.temp_c));
+      weatherYData = weatherReadings.map(w => Number(w.avg_temp));
     }
 
     const unit = readings.find(r => r.unit)?.unit ?? "?";
