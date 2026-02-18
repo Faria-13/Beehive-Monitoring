@@ -104,8 +104,13 @@ export default function SensorLineChart({ sensorId, showLocalWeather = false }) 
         if (!cancelled) setReadings(data);
 
         if (showLocalWeather) {
-          const weatherData = await fetchWeatherByRange(startISO, endISO);
-          if (!cancelled) setWeatherReadings(weatherData);
+            const { data: weatherData, error: weatherError } = await supabase.rpc(
+              "get_daily_avg_weather",
+              { start_ts: startISO, end_ts: endISO }
+            );
+            if (weatherError) throw weatherError;
+            if (!cancelled) setWeatherReadings(weatherData);
+          
         }
       } catch (e) {
         if (!cancelled) {
