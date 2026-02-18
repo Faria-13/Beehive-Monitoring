@@ -157,21 +157,8 @@ export default function SensorLineChart({ sensorId, showLocalWeather = false }) 
     // Prepare weather data if available
     let weatherYData = dayKeys.map(() => null);
     if (showLocalWeather && weatherReadings) {
-      const weatherBuckets = new Map();
-      for (const w of weatherReadings) {
-        const key = dayjs(w.timestamp).format("YYYY-MM-DD");
-        const val = Number(w.temp_c);
-        const existing = weatherBuckets.get(key) ?? { sum: 0, count: 0 };
-        existing.sum += val;
-        existing.count += 1;
-        weatherBuckets.set(key, existing);
-      }
-
-      weatherYData = dayKeys.map((k) => {
-        const b = weatherBuckets.get(k);
-        if (!b || b.count === 0) return null;
-        return Math.round((b.sum / b.count) * 100) / 100;
-      });
+      const weatherMap = new Map(weatherReadings.map(w => [w.day, w.avg_temp]));
+      weatherYData = dayKeys.map(k => weatherMap.get(k) ?? null);
     }
 
     return { xData, yData, weatherYData, unit };
