@@ -104,13 +104,8 @@ export default function SensorLineChart({ sensorId, showLocalWeather = false }) 
         if (!cancelled) setReadings(data);
 
         if (showLocalWeather) {
-            const { data: weatherData, error: weatherError } = await supabase.rpc(
-              "get_daily_avg_weather",
-              { start_ts: startISO, end_ts: endISO }
-            );
-            if (weatherError) throw weatherError;
-            if (!cancelled) setWeatherReadings(weatherData);
-          
+          const weatherData = await fetchWeatherByRange(startISO, endISO);
+          if (!cancelled) setWeatherReadings(weatherData);
         }
       } catch (e) {
         if (!cancelled) {
@@ -126,25 +121,61 @@ export default function SensorLineChart({ sensorId, showLocalWeather = false }) 
   }, [sensorId, startDate, endDate, showLocalWeather]);
 
   // Prepare chart data
-  // Prepare chart data
   const chartData = useMemo(() => {
-    if (!readings) return null;
+    if (readings === null) return null;
 
-    // Sensor data
-    const xData = readings.map(r => new Date(r.timestamp));
-    const yData = readings.map(r => Number(r.value));
+    const safeStart = startDate.isAfter(endDate) ? endDate : startDate;
+    const safeEnd = endDate.isBefore(startDate) ? startDate : endDate;
 
-    // Weather data
-    let weatherYData = [];
-    if (showLocalWeather && weatherReadings) {
-      weatherYData = weatherReadings.map(w => Number(w.avg_temp));
+    const dayKeys = [];
+    let cursor = safeStart.startOf("day");
+    const last = safeEnd.startOf("day");
+    while (cursor.isBefore(last) || cursor.isSame(last, "day")) {
+      dayKeys.push(cursor.format("YYYY-MM-DD"));
+      cursor = cursor.add(1, "day");
     }
 
-    const unit = readings.find(r => r.unit)?.unit ?? "?";
+    const buckets = new Map();
+    for (const r of readings) {
+      const key = dayjs(r.timestamp).format("YYYY-MM-DD");
+      const val = Number(r.value);
+      const existing = buckets.get(key) ?? { sum: 0, count: 0 };
+      existing.sum += val;
+      existing.count += 1;
+      buckets.set(key, existing);
+    }
+
+    const xData = dayKeys.map((k) => dayjs(k).toDate());
+    const yData = dayKeys.map((k) => {
+      const b = buckets.get(k);
+      if (!b || b.count === 0) return null;
+      return Math.round((b.sum / b.count) * 100) / 100;
+    });
+
+    const unit = readings.find((r) => r.unit)?.unit ?? "?";
+
+    // Prepare weather data if available
+    let weatherYData = dayKeys.map(() => null);
+    if (showLocalWeather && weatherReadings) {
+      const weatherBuckets = new Map();
+      for (const w of weatherReadings) {
+        const key = dayjs(w.timestamp).format("YYYY-MM-DD");
+        const val = Number(w.temp_c);
+        const existing = weatherBuckets.get(key) ?? { sum: 0, count: 0 };
+        existing.sum += val;
+        existing.count += 1;
+        weatherBuckets.set(key, existing);
+      }
+
+      weatherYData = dayKeys.map((k) => {
+        const b = weatherBuckets.get(k);
+        if (!b || b.count === 0) return null;
+        return Math.round((b.sum / b.count) * 100) / 100;
+      });
+    }
 
     return { xData, yData, weatherYData, unit };
-  }, [readings, weatherReadings, showLocalWeather]);
-
+  }, [readings, weatherReadings, startDate, endDate, showLocalWeather]);
   const isReady =
   chartData &&
   chartData.xData.length > 0 &&
