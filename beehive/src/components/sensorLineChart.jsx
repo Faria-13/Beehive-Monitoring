@@ -203,10 +203,10 @@ export default function SensorLineChartControlled({
         {sensorOptions.length > 0 && (
           <Stack
             direction="row"
-            spacing={5}
+            spacing={3}
             justifyContent="center"
             alignItems="center"
-            sx={{ mb: 2, flexWrap: "wrap" }}
+            sx={{ mb: 1, flexWrap: "wrap" }}
           >
             {sensorOptions.map((opt) => {
               const isActive = opt.id === sensorId;
@@ -223,10 +223,8 @@ export default function SensorLineChartControlled({
                   sx={{
                     textTransform: "none",
                     minWidth: 0,
-                    px: 0.8,
+                    px: 0.5,
                     py: 0.25,
-                    fontSize: "20px",
-                    color: isActive ? "#FE9805" : "var(--text)",
                     fontWeight: isActive ? 700 : 400,
                     textDecoration: isActive ? "underline" : "none",
                     textUnderlineOffset: "6px",
@@ -240,9 +238,9 @@ export default function SensorLineChartControlled({
           </Stack>
         )}
 
-{/*         <Typography variant="h6" gutterBottom>
+        <Typography variant="h6" gutterBottom>
           {sensorType} Sensor (ID: {sensorId})
-        </Typography> */}
+        </Typography>
 
         <LocalizationProvider dateAdapter={AdapterDayjs}>
           <Stack direction="row" spacing={2} sx={{ mb: 2, flexWrap: "wrap" }}>
