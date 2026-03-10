@@ -7,6 +7,7 @@ import Weight from "./pages/Weight";
 import WebsiteNav from "./components/topNav";
 import Carbon from "./pages/Carbon";
 import Volume from "./pages/Volume";
+import AlertsPage from "./pages/AlertsPage";
 
 function App() {
   return (
