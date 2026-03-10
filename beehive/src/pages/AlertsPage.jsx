@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Box, Typography, Alert, Stack } from "@mui/material";
-import { supabase } from "../supabaseClient";
+import { supabase } from "../createClient";
 
 export default function AlertsPage() {
   const [alerts, setAlerts] = useState([]);
