@@ -184,7 +184,7 @@ export default function SensorLineChartControlled({
 
     // return { xData, yData, weatherYData, unit };
 
-    // Prepare weather data if available
+      //basically juans old code but with a map instead of buckets since the weather data is already averaged by day in the backend, so we can just do a direct lookup instead of averaging ourselves again
       let weatherYData = dayKeys.map(() => null);
 
       if (showLocalWeather && weatherReadings) {
