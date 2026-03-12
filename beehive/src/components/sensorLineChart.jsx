@@ -165,7 +165,7 @@ export default function SensorLineChartControlled({
       const weatherBuckets = new Map();
       for (const w of weatherReadings) {
         const key = dayjs(w.timestamp).format("YYYY-MM-DD");
-        const val = Number(w.temp_c);
+        const val = Number(w.avg_temp);
         if (!Number.isFinite(val)) continue;
         const existing = weatherBuckets.get(key) ?? { sum: 0, count: 0 };
         existing.sum += val;
