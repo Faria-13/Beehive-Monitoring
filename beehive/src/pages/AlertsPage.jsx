@@ -1,477 +1,510 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import Box from "@mui/material/Box";
-import Button from "@mui/material/Button";
-import Card from "@mui/material/Card";
-import CardContent from "@mui/material/CardContent";
-import Chip from "@mui/material/Chip";
-import CircularProgress from "@mui/material/CircularProgress";
-import Divider from "@mui/material/Divider";
-import IconButton from "@mui/material/IconButton";
-import Stack from "@mui/material/Stack";
-import Tab from "@mui/material/Tab";
-import Tabs from "@mui/material/Tabs";
-import Tooltip from "@mui/material/Tooltip";
-import Typography from "@mui/material/Typography";
+import { useEffect, useState, useCallback } from "react";
+import { supabase } from "../createClient";
 
-import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline";
-import DoneAllIcon from "@mui/icons-material/DoneAll";
-import ErrorOutlineIcon from "@mui/icons-material/ErrorOutline";
-import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
-import RefreshIcon from "@mui/icons-material/Refresh";
-import WarningAmberIcon from "@mui/icons-material/WarningAmber";
+// ─── helpers ────────────────────────────────────────────────────────────────
 
-import dayjs from "dayjs";
-import relativeTime from "dayjs/plugin/relativeTime";
-dayjs.extend(relativeTime);
-
-import { fetchAlerts, acknowledgeAlert, resolveAlert } from "../api/alerts";
-
-// ─── Config ───────────────────────────────────────────────────────────────────
-
-const HIVE_IDS = [25, 26, 27, 28, 29, 30, 31, 32];
-
-const LEVEL = {
+const LEVEL_META = {
   critical: {
-    label: "Critical",
-    color: "#c62828",
-    bg: "#fff5f5",
-    border: "#ef9a9a",
-    icon: ErrorOutlineIcon,
-    chipSx: { backgroundColor: "#c62828", color: "#fff" },
+    color: "#FF4D4D",
+    bg: "rgba(255,77,77,0.10)",
+    border: "rgba(255,77,77,0.35)",
+    label: "CRITICAL",
+    icon: "⚠",
   },
   warning: {
-    label: "Warning",
-    color: "#e65100",
-    bg: "#fff8f0",
-    border: "#ffcc80",
-    icon: WarningAmberIcon,
-    chipSx: { backgroundColor: "#e65100", color: "#fff" },
+    color: "#FE9805",
+    bg: "rgba(254,152,5,0.10)",
+    border: "rgba(254,152,5,0.35)",
+    label: "WARNING",
+    icon: "⚡",
   },
   info: {
-    label: "Info",
-    color: "#0277bd",
-    bg: "#f0f8ff",
-    border: "#90caf9",
-    icon: InfoOutlinedIcon,
-    chipSx: { backgroundColor: "#0277bd", color: "#fff" },
+    color: "#4DA6FF",
+    bg: "rgba(77,166,255,0.10)",
+    border: "rgba(77,166,255,0.35)",
+    label: "INFO",
+    icon: "ℹ",
   },
 };
 
-function levelOf(alert) {
-  return LEVEL[alert.alert_level] ?? LEVEL.info;
+function fmtTime(ts) {
+  if (!ts) return "—";
+  return new Date(ts).toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
-// ─── Summary pills ────────────────────────────────────────────────────────────
+// ─── Toast ──────────────────────────────────────────────────────────────────
 
-function StatPill({ value, label, color, bg, border }) {
+function Toast({ toasts, onDismiss }) {
   return (
-    <Box
-      sx={{
-        textAlign: "center",
-        px: 2.5,
-        py: 1.25,
-        borderRadius: 2,
-        backgroundColor: bg,
-        border: `1.5px solid ${border}`,
-        minWidth: 80,
-      }}
-    >
-      <Typography sx={{ fontWeight: 800, fontSize: "1.5rem", color, lineHeight: 1 }}>
-        {value}
-      </Typography>
-      <Typography variant="caption" sx={{ color, fontWeight: 600, fontSize: "0.7rem" }}>
-        {label}
-      </Typography>
-    </Box>
-  );
-}
-
-// ─── Single alert row ─────────────────────────────────────────────────────────
-
-function AlertRow({ alert, onAcknowledge, onResolve, actioning }) {
-  const lv = levelOf(alert);
-  const Icon = lv.icon;
-  const isResolved = alert.resolved;
-  const isAcked = alert.acknowledged;
-
-  return (
-    <Box
-      sx={{
-        display: "flex",
-        alignItems: "flex-start",
-        gap: 2,
-        px: 2,
-        py: 1.5,
-        borderRadius: 1.5,
-        backgroundColor: isResolved ? "transparent" : lv.bg,
-        borderLeft: `4px solid ${isResolved ? "#bdbdbd" : lv.color}`,
-        opacity: isResolved ? 0.6 : 1,
-        transition: "opacity 0.2s",
-      }}
-    >
-      {/* Icon */}
-      <Box sx={{ pt: 0.3, flexShrink: 0 }}>
-        <Icon sx={{ color: isResolved ? "#9e9e9e" : lv.color, fontSize: 20 }} />
-      </Box>
-
-      {/* Body */}
-      <Box sx={{ flex: 1, minWidth: 0 }}>
-        <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" sx={{ mb: 0.25 }}>
-          <Chip
-            label={lv.label}
-            size="small"
-            sx={{
-              ...lv.chipSx,
-              height: 20,
-              fontSize: "0.68rem",
-              fontWeight: 700,
-              opacity: isResolved ? 0.5 : 1,
+    <div style={styles.toastContainer}>
+      {toasts.map((t) => {
+        const meta = LEVEL_META[t.alert_level] ?? LEVEL_META.info;
+        return (
+          <div
+            key={t.id}
+            style={{
+              ...styles.toast,
+              borderLeft: `4px solid ${meta.color}`,
+              animation: "slideIn 0.3s ease",
             }}
-          />
-          <Typography variant="caption" sx={{ color: "text.secondary", fontWeight: 600 }}>
-            Hive {alert.hive_id}
-          </Typography>
-          {isAcked && !isResolved && (
-            <Chip
-              label="Acknowledged"
-              size="small"
-              variant="outlined"
-              sx={{ height: 18, fontSize: "0.65rem", borderColor: "#9e9e9e", color: "#757575" }}
-            />
-          )}
-          {isResolved && (
-            <Chip
-              label="Resolved"
-              size="small"
-              variant="outlined"
-              sx={{ height: 18, fontSize: "0.65rem", borderColor: "#4caf50", color: "#4caf50" }}
-            />
-          )}
-        </Stack>
-
-        <Typography variant="body2" sx={{ lineHeight: 1.45, wordBreak: "break-word" }}>
-          {alert.message}
-        </Typography>
-
-        <Stack direction="row" spacing={2} sx={{ mt: 0.5 }} flexWrap="wrap">
-          {alert.sensor_value !== null && (
-            <Typography variant="caption" sx={{ color: "text.secondary" }}>
-              Value: {parseFloat(alert.sensor_value).toFixed(1)}
-            </Typography>
-          )}
-          <Typography variant="caption" sx={{ color: "text.secondary" }}>
-            {dayjs(alert.timestamp).fromNow()} · {dayjs(alert.timestamp).format("MMM D, YYYY HH:mm")}
-          </Typography>
-          {alert.resolved_at && (
-            <Typography variant="caption" sx={{ color: "#4caf50" }}>
-              Resolved {dayjs(alert.resolved_at).fromNow()}
-            </Typography>
-          )}
-        </Stack>
-      </Box>
-
-      {/* Actions */}
-      {!isResolved && (
-        <Stack direction="row" spacing={0.5} sx={{ flexShrink: 0, pt: 0.25 }}>
-          {!isAcked && (
-            <Tooltip title="Acknowledge">
-              <span>
-                <IconButton
-                  size="small"
-                  disabled={actioning}
-                  onClick={() => onAcknowledge(alert.alert_id)}
-                  sx={{ color: "#757575" }}
-                >
-                  <DoneAllIcon fontSize="small" />
-                </IconButton>
-              </span>
-            </Tooltip>
-          )}
-          <Tooltip title="Mark as resolved">
-            <span>
-              <Button
-                size="small"
-                variant="outlined"
-                disabled={actioning}
-                onClick={() => onResolve(alert.alert_id)}
-                sx={{
-                  fontSize: "0.7rem",
-                  py: 0.25,
-                  px: 1,
-                  minWidth: 0,
-                  borderColor: "#4caf50",
-                  color: "#4caf50",
-                  "&:hover": { borderColor: "#388e3c", backgroundColor: "#f0fdf4" },
-                }}
-              >
-                Resolve
-              </Button>
-            </span>
-          </Tooltip>
-        </Stack>
-      )}
-    </Box>
+          >
+            <span style={{ color: meta.color, fontSize: 18 }}>{meta.icon}</span>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={styles.toastTitle}>
+                Hive {t.hive_id} — {meta.label}
+              </div>
+              <div style={styles.toastMsg}>{t.message}</div>
+            </div>
+            <button style={styles.toastClose} onClick={() => onDismiss(t.id)}>
+              ✕
+            </button>
+          </div>
+        );
+      })}
+    </div>
   );
 }
 
-// ─── Hive group card ──────────────────────────────────────────────────────────
+// ─── Alert row ──────────────────────────────────────────────────────────────
 
-function HiveAlertGroup({ hiveId, alerts, onAcknowledge, onResolve, actioning }) {
-  const activeAlerts = alerts.filter((a) => !a.resolved);
-  const critCount = activeAlerts.filter((a) => a.alert_level === "critical").length;
-  const warnCount = activeAlerts.filter((a) => a.alert_level === "warning").length;
-  const borderColor =
-    critCount > 0 ? "#c62828" : warnCount > 0 ? "#e65100" : "#4caf50";
+function AlertRow({ alert, onAcknowledge, onResolve }) {
+  const meta = LEVEL_META[alert.alert_level] ?? LEVEL_META.info;
+  const [busy, setBusy] = useState(false);
+
+  const handle = async (action) => {
+    setBusy(true);
+    await action();
+    setBusy(false);
+  };
 
   return (
-    <Card
-      sx={{
-        border: `2px solid ${borderColor}`,
-        boxShadow: "none",
-        backgroundColor: "var(--bg, #fff)",
+    <div
+      style={{
+        ...styles.alertRow,
+        background: meta.bg,
+        borderLeft: `4px solid ${meta.color}`,
+        border: `1px solid ${meta.border}`,
+        borderLeft: `4px solid ${meta.color}`,
+        opacity: alert.resolved ? 0.55 : 1,
       }}
     >
-      <CardContent sx={{ pb: "12px !important" }}>
-        <Stack direction="row" alignItems="center" spacing={1.5} sx={{ mb: alerts.length > 0 ? 1.5 : 0 }}>
-          {activeAlerts.length === 0 ? (
-            <CheckCircleOutlineIcon sx={{ color: "#4caf50", fontSize: 18 }} />
-          ) : critCount > 0 ? (
-            <ErrorOutlineIcon sx={{ color: "#c62828", fontSize: 18 }} />
-          ) : (
-            <WarningAmberIcon sx={{ color: "#e65100", fontSize: 18 }} />
-          )}
-          <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
-            Hive {hiveId}
-          </Typography>
-          {critCount > 0 && (
-            <Chip label={`${critCount} critical`} size="small" sx={{ backgroundColor: "#c62828", color: "#fff", fontWeight: 700, height: 20, fontSize: "0.68rem" }} />
-          )}
-          {warnCount > 0 && (
-            <Chip label={`${warnCount} warning`} size="small" sx={{ backgroundColor: "#e65100", color: "#fff", fontWeight: 700, height: 20, fontSize: "0.68rem" }} />
-          )}
-          {activeAlerts.length === 0 && (
-            <Typography variant="body2" sx={{ color: "text.secondary" }}>
-              All clear
-            </Typography>
-          )}
-        </Stack>
+      {/* left: icon + level */}
+      <div style={styles.alertLevel}>
+        <span style={{ color: meta.color, fontSize: 20 }}>{meta.icon}</span>
+        <span style={{ ...styles.levelBadge, color: meta.color, borderColor: meta.border }}>
+          {meta.label}
+        </span>
+      </div>
 
-        {alerts.length > 0 && (
-          <Stack spacing={0.75}>
-            {alerts.map((alert, i) => (
+      {/* middle: message + meta */}
+      <div style={styles.alertBody}>
+        <div style={styles.alertMessage}>{alert.message}</div>
+        <div style={styles.alertMeta}>
+          <span>🐝 Hive {alert.hive_id}</span>
+          {alert.sensor_value != null && (
+            <span>📊 {parseFloat(alert.sensor_value).toFixed(1)}</span>
+          )}
+          <span>🕐 {fmtTime(alert.timestamp)}</span>
+          {alert.acknowledged && (
+            <span style={{ color: "#8BC34A" }}>✓ Ack {fmtTime(alert.acknowledged_at)}</span>
+          )}
+          {alert.resolved && (
+            <span style={{ color: "#66BB6A" }}>✅ Resolved {fmtTime(alert.resolved_at)}</span>
+          )}
+        </div>
+      </div>
+
+      {/* right: actions */}
+      <div style={styles.alertActions}>
+        {!alert.acknowledged && !alert.resolved && (
+          <button
+            style={{ ...styles.btn, ...styles.btnAck }}
+            disabled={busy}
+            onClick={() => handle(onAcknowledge)}
+          >
+            Acknowledge
+          </button>
+        )}
+        {!alert.resolved && (
+          <button
+            style={{ ...styles.btn, ...styles.btnResolve }}
+            disabled={busy}
+            onClick={() => handle(onResolve)}
+          >
+            Resolve
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Main Page ───────────────────────────────────────────────────────────────
+
+export default function AlertsPage() {
+  const [alerts, setAlerts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState("all"); // all | critical | warning | info | unresolved
+  const [toasts, setToasts] = useState([]);
+
+  // ── fetch ──
+  const fetchAlerts = useCallback(async () => {
+    const { data, error } = await supabase
+      .from("alerts")
+      .select("*")
+      .order("timestamp", { ascending: false })
+      .limit(200);
+
+    if (!error && data) setAlerts(data);
+    setLoading(false);
+  }, []);
+
+  useEffect(() => {
+    fetchAlerts();
+  }, [fetchAlerts]);
+
+  // ── realtime ──
+  useEffect(() => {
+    const channel = supabase
+      .channel("alerts-page-live")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "alerts" },
+        (payload) => {
+          if (payload.eventType === "INSERT") {
+            const newAlert = payload.new;
+            setAlerts((prev) => [newAlert, ...prev]);
+
+            // show toast
+            const toastId = Date.now();
+            setToasts((prev) => [...prev, { ...newAlert, id: toastId }]);
+            setTimeout(() => {
+              setToasts((prev) => prev.filter((t) => t.id !== toastId));
+            }, 6000);
+          }
+
+          if (payload.eventType === "UPDATE") {
+            setAlerts((prev) =>
+              prev.map((a) =>
+                a.alert_id === payload.new.alert_id ? payload.new : a
+              )
+            );
+          }
+        }
+      )
+      .subscribe();
+
+    return () => supabase.removeChannel(channel);
+  }, []);
+
+  // ── actions ──
+  const acknowledge = async (alertId) => {
+    await supabase
+      .from("alerts")
+      .update({ acknowledged: true, acknowledged_at: new Date().toISOString() })
+      .eq("alert_id", alertId);
+  };
+
+  const resolve = async (alertId) => {
+    await supabase
+      .from("alerts")
+      .update({
+        resolved: true,
+        resolved_at: new Date().toISOString(),
+        acknowledged: true,
+        acknowledged_at: new Date().toISOString(),
+      })
+      .eq("alert_id", alertId);
+  };
+
+  // ── filter ──
+  const filtered = alerts.filter((a) => {
+    if (filter === "unresolved") return !a.resolved;
+    if (filter === "all") return true;
+    return a.alert_level === filter;
+  });
+
+  // ── counts ──
+  const counts = {
+    critical: alerts.filter((a) => a.alert_level === "critical" && !a.resolved).length,
+    warning: alerts.filter((a) => a.alert_level === "warning" && !a.resolved).length,
+    info: alerts.filter((a) => a.alert_level === "info" && !a.resolved).length,
+  };
+
+  return (
+    <>
+      {/* Toast layer */}
+      <Toast toasts={toasts} onDismiss={(id) => setToasts((p) => p.filter((t) => t.id !== id))} />
+
+      <div style={styles.page}>
+        {/* Header */}
+        <div style={styles.header}>
+          <div>
+            <h1 style={styles.title}>🐝 Alert Center</h1>
+            <p style={styles.subtitle}>Live monitoring across all hives</p>
+          </div>
+
+          {/* Summary badges */}
+          <div style={styles.summaryRow}>
+            {Object.entries(counts).map(([level, count]) => {
+              const meta = LEVEL_META[level];
+              return (
+                <div
+                  key={level}
+                  style={{
+                    ...styles.summaryBadge,
+                    borderColor: meta.border,
+                    background: meta.bg,
+                  }}
+                >
+                  <span style={{ color: meta.color, fontWeight: 700, fontSize: 22 }}>
+                    {count}
+                  </span>
+                  <span style={{ color: meta.color, fontSize: 11, letterSpacing: 1 }}>
+                    {meta.label}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Filter tabs */}
+        <div style={styles.filterRow}>
+          {["all", "unresolved", "critical", "warning", "info"].map((f) => (
+            <button
+              key={f}
+              style={{
+                ...styles.filterBtn,
+                ...(filter === f ? styles.filterBtnActive : {}),
+              }}
+              onClick={() => setFilter(f)}
+            >
+              {f === "all" ? "All" : f === "unresolved" ? "Unresolved" : LEVEL_META[f].label}
+            </button>
+          ))}
+        </div>
+
+        {/* Alert list */}
+        <div style={styles.list}>
+          {loading ? (
+            <div style={styles.empty}>Loading alerts…</div>
+          ) : filtered.length === 0 ? (
+            <div style={styles.empty}>
+              {filter === "unresolved" ? "✅ All clear — no unresolved alerts!" : "No alerts found."}
+            </div>
+          ) : (
+            filtered.map((alert) => (
               <AlertRow
                 key={alert.alert_id}
                 alert={alert}
-                onAcknowledge={onAcknowledge}
-                onResolve={onResolve}
-                actioning={actioning.has(alert.alert_id)}
+                onAcknowledge={() => acknowledge(alert.alert_id)}
+                onResolve={() => resolve(alert.alert_id)}
               />
-            ))}
-          </Stack>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
-// ─── Page ─────────────────────────────────────────────────────────────────────
-
-export default function AlertsPage() {
-  const [allAlerts, setAllAlerts] = useState(null); // null = loading
-  const [error, setError]         = useState(null);
-  const [tab, setTab]             = useState(0);     // 0=active, 1=all
-  const [actioning, setActioning] = useState(new Set());
-  const [refreshKey, setRefreshKey] = useState(0);
-
-  // ── Load ──
-  useEffect(() => {
-    let cancelled = false;
-    setAllAlerts(null);
-    setError(null);
-
-    fetchAlerts({ resolved: null })
-      .then((data) => { if (!cancelled) setAllAlerts(data); })
-      .catch((e)   => { if (!cancelled) setError(e?.message ?? "Failed to load alerts"); });
-
-    return () => { cancelled = true; };
-  }, [refreshKey]);
-
-  // ── Actions ──
-  const handleAcknowledge = useCallback(async (alertId) => {
-    setActioning((s) => new Set(s).add(alertId));
-    try {
-      const updated = await acknowledgeAlert(alertId);
-      setAllAlerts((prev) =>
-        prev.map((a) => (a.alert_id === alertId ? { ...a, ...updated } : a))
-      );
-    } catch (e) {
-      console.error("Acknowledge failed:", e);
-    } finally {
-      setActioning((s) => { const n = new Set(s); n.delete(alertId); return n; });
-    }
-  }, []);
-
-  const handleResolve = useCallback(async (alertId) => {
-    setActioning((s) => new Set(s).add(alertId));
-    try {
-      const updated = await resolveAlert(alertId);
-      setAllAlerts((prev) =>
-        prev.map((a) => (a.alert_id === alertId ? { ...a, ...updated } : a))
-      );
-    } catch (e) {
-      console.error("Resolve failed:", e);
-    } finally {
-      setActioning((s) => { const n = new Set(s); n.delete(alertId); return n; });
-    }
-  }, []);
-
-  // ── Derived data ──
-  const { visibleAlerts, critTotal, warnTotal, infoTotal, activeTotal, resolvedTotal } =
-    useMemo(() => {
-      if (!allAlerts) return { visibleAlerts: [], critTotal: 0, warnTotal: 0, infoTotal: 0, activeTotal: 0, resolvedTotal: 0 };
-
-      const active   = allAlerts.filter((a) => !a.resolved);
-      const resolved = allAlerts.filter((a) => a.resolved);
-
-      return {
-        visibleAlerts: tab === 0 ? active : allAlerts,
-        critTotal:     active.filter((a) => a.alert_level === "critical").length,
-        warnTotal:     active.filter((a) => a.alert_level === "warning").length,
-        infoTotal:     active.filter((a) => a.alert_level === "info").length,
-        activeTotal:   active.length,
-        resolvedTotal: resolved.length,
-      };
-    }, [allAlerts, tab]);
-
-  // Group by hive, only show hives that have alerts in the current view
-  const hiveGroups = useMemo(() => {
-    const map = new Map();
-    for (const id of HIVE_IDS) map.set(id, []);
-    for (const a of visibleAlerts) {
-      if (map.has(a.hive_id)) map.get(a.hive_id).push(a);
-      else map.set(a.hive_id, [a]);
-    }
-    // Sort hive groups: most severe first, then hive ID
-    return Array.from(map.entries())
-      .filter(([, alerts]) => alerts.length > 0 || tab === 0) // active tab: show all hives; history: only hives with data
-      .sort(([, a], [, b]) => {
-        const score = (arr) =>
-          arr.filter((x) => !x.resolved && x.alert_level === "critical").length * 100 +
-          arr.filter((x) => !x.resolved && x.alert_level === "warning").length  * 10;
-        return score(b) - score(a);
-      });
-  }, [visibleAlerts, tab]);
-
-  // ── Render ──
-  return (
-    <Box sx={{ maxWidth: 900, mx: "auto" }}>
-
-      {/* Page header */}
-      <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 2.5 }}>
-        <Typography variant="h4" sx={{ fontWeight: 800 }}>
-          Alerts
-        </Typography>
-        <Tooltip title="Refresh">
-          <span>
-            <IconButton onClick={() => setRefreshKey((k) => k + 1)} disabled={allAlerts === null}>
-              <RefreshIcon />
-            </IconButton>
-          </span>
-        </Tooltip>
-      </Stack>
-
-      {/* Summary bar */}
-      {allAlerts !== null && (
-        <Card sx={{ border: "2px solid var(--outline, #e0e0e0)", boxShadow: "none", backgroundColor: "var(--bg, #fff)", mb: 3 }}>
-          <CardContent>
-            <Stack direction={{ xs: "column", sm: "row" }} spacing={3} alignItems={{ sm: "center" }} justifyContent="space-between">
-              <Box>
-                <Typography variant="h6" sx={{ fontWeight: 700 }}>
-                  Active Alert Summary
-                </Typography>
-                <Typography variant="body2" sx={{ color: "text.secondary" }}>
-                  {HIVE_IDS.length} hives monitored · {resolvedTotal} resolved
-                </Typography>
-              </Box>
-              <Stack direction="row" spacing={1.5} flexWrap="wrap">
-                <StatPill value={critTotal}   label="Critical" color="#c62828" bg="#fff5f5" border="#ef9a9a" />
-                <StatPill value={warnTotal}   label="Warnings" color="#e65100" bg="#fff8f0" border="#ffcc80" />
-                <StatPill value={infoTotal}   label="Info"     color="#0277bd" bg="#f0f8ff" border="#90caf9" />
-              </Stack>
-            </Stack>
-
-            {activeTotal === 0 && (
-              <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 1.5 }}>
-                <CheckCircleOutlineIcon sx={{ color: "#4caf50" }} />
-                <Typography variant="body1" sx={{ color: "#2e7d32", fontWeight: 600 }}>
-                  All hives operating within normal parameters.
-                </Typography>
-              </Stack>
-            )}
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Tabs */}
-      <Tabs
-        value={tab}
-        onChange={(_, v) => setTab(v)}
-        sx={{ mb: 2, borderBottom: "1px solid var(--outline, #e0e0e0)" }}
-      >
-        <Tab
-          label={
-            <Stack direction="row" spacing={0.75} alignItems="center">
-              <span>Active</span>
-              {activeTotal > 0 && (
-                <Chip label={activeTotal} size="small" sx={{ backgroundColor: "#c62828", color: "#fff", height: 18, fontSize: "0.65rem", fontWeight: 700 }} />
-              )}
-            </Stack>
-          }
-        />
-        <Tab label="All Alerts" />
-      </Tabs>
-
-      {/* Error */}
-      {error && (
-        <Typography color="error" sx={{ mb: 2 }}>
-          Error: {error}
-        </Typography>
-      )}
-
-      {/* Loading */}
-      {allAlerts === null && !error && (
-        <Stack alignItems="center" spacing={2} sx={{ py: 8 }}>
-          <CircularProgress sx={{ color: "#FE9805" }} />
-          <Typography color="text.secondary">Loading alerts…</Typography>
-        </Stack>
-      )}
-
-      {/* Hive groups */}
-      {allAlerts !== null && (
-        <Stack spacing={2}>
-          {hiveGroups.length === 0 && (
-            <Box sx={{ py: 6, textAlign: "center" }}>
-              <CheckCircleOutlineIcon sx={{ fontSize: 48, color: "#4caf50", mb: 1 }} />
-              <Typography variant="h6" sx={{ color: "#2e7d32" }}>
-                No active alerts
-              </Typography>
-              <Typography variant="body2" sx={{ color: "text.secondary", mt: 0.5 }}>
-                All hives are healthy.
-              </Typography>
-            </Box>
+            ))
           )}
-          {hiveGroups.map(([hiveId, alerts]) => (
-            <HiveAlertGroup
-              key={hiveId}
-              hiveId={hiveId}
-              alerts={alerts}
-              onAcknowledge={handleAcknowledge}
-              onResolve={handleResolve}
-              actioning={actioning}
-            />
-          ))}
-        </Stack>
-      )}
-    </Box>
+        </div>
+      </div>
+
+      <style>{`
+        @keyframes slideIn {
+          from { transform: translateX(120%); opacity: 0; }
+          to   { transform: translateX(0);   opacity: 1; }
+        }
+      `}</style>
+    </>
   );
 }
+
+// ─── Styles ──────────────────────────────────────────────────────────────────
+
+const styles = {
+  page: {
+    maxWidth: 900,
+    margin: "0 auto",
+    padding: "8px 0 40px",
+    fontFamily: "inherit",
+  },
+  header: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    flexWrap: "wrap",
+    gap: 16,
+    marginBottom: 24,
+  },
+  title: {
+    margin: 0,
+    fontSize: 26,
+    fontWeight: 700,
+    color: "var(--text, #1a1a1a)",
+  },
+  subtitle: {
+    margin: "4px 0 0",
+    fontSize: 14,
+    color: "var(--text-muted, #888)",
+  },
+  summaryRow: {
+    display: "flex",
+    gap: 12,
+    flexWrap: "wrap",
+  },
+  summaryBadge: {
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    padding: "10px 18px",
+    borderRadius: 10,
+    border: "1px solid",
+    minWidth: 70,
+    gap: 2,
+  },
+  filterRow: {
+    display: "flex",
+    gap: 8,
+    marginBottom: 20,
+    flexWrap: "wrap",
+  },
+  filterBtn: {
+    padding: "6px 16px",
+    borderRadius: 20,
+    border: "1px solid var(--outline, #ddd)",
+    background: "transparent",
+    cursor: "pointer",
+    fontSize: 13,
+    color: "var(--text, #444)",
+    fontWeight: 500,
+    transition: "all 0.15s",
+  },
+  filterBtnActive: {
+    background: "#FE9805",
+    borderColor: "#FE9805",
+    color: "#fff",
+  },
+  list: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 10,
+  },
+  alertRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: 14,
+    padding: "14px 16px",
+    borderRadius: 10,
+    flexWrap: "wrap",
+    transition: "opacity 0.2s",
+  },
+  alertLevel: {
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    gap: 4,
+    minWidth: 64,
+  },
+  levelBadge: {
+    fontSize: 10,
+    fontWeight: 700,
+    letterSpacing: 1,
+    border: "1px solid",
+    borderRadius: 4,
+    padding: "1px 5px",
+  },
+  alertBody: {
+    flex: 1,
+    minWidth: 180,
+  },
+  alertMessage: {
+    fontSize: 14,
+    fontWeight: 600,
+    color: "var(--text, #1a1a1a)",
+    marginBottom: 4,
+  },
+  alertMeta: {
+    display: "flex",
+    flexWrap: "wrap",
+    gap: 10,
+    fontSize: 12,
+    color: "var(--text-muted, #888)",
+  },
+  alertActions: {
+    display: "flex",
+    gap: 8,
+    flexShrink: 0,
+  },
+  btn: {
+    padding: "6px 14px",
+    borderRadius: 7,
+    border: "none",
+    cursor: "pointer",
+    fontSize: 12,
+    fontWeight: 600,
+    transition: "opacity 0.15s",
+  },
+  btnAck: {
+    background: "rgba(254,152,5,0.15)",
+    color: "#FE9805",
+    border: "1px solid rgba(254,152,5,0.4)",
+  },
+  btnResolve: {
+    background: "rgba(102,187,106,0.15)",
+    color: "#4CAF50",
+    border: "1px solid rgba(102,187,106,0.4)",
+  },
+  // Toast
+  toastContainer: {
+    position: "fixed",
+    bottom: 24,
+    right: 24,
+    zIndex: 9999,
+    display: "flex",
+    flexDirection: "column",
+    gap: 10,
+    maxWidth: 360,
+    width: "100%",
+  },
+  toast: {
+    display: "flex",
+    alignItems: "flex-start",
+    gap: 10,
+    padding: "14px 16px",
+    borderRadius: 10,
+    background: "var(--bg, #fff)",
+    boxShadow: "0 4px 20px rgba(0,0,0,0.15)",
+    border: "1px solid var(--outline, #eee)",
+  },
+  toastTitle: {
+    fontWeight: 700,
+    fontSize: 13,
+    color: "var(--text, #1a1a1a)",
+    marginBottom: 2,
+  },
+  toastMsg: {
+    fontSize: 12,
+    color: "var(--text-muted, #888)",
+    whiteSpace: "nowrap",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+  },
+  toastClose: {
+    background: "none",
+    border: "none",
+    cursor: "pointer",
+    color: "var(--text-muted, #aaa)",
+    fontSize: 14,
+    padding: 0,
+    lineHeight: 1,
+    flexShrink: 0,
+  },
+  empty: {
+    textAlign: "center",
+    padding: "60px 0",
+    color: "var(--text-muted, #aaa)",
+    fontSize: 15,
+  },
+};
