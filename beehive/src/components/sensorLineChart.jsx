@@ -167,17 +167,19 @@ export default function SensorLineChartControlled({
         const key = dayjs(w.timestamp).format("YYYY-MM-DD");
         const val = Number(w.avg_temp);
         if (!Number.isFinite(val)) continue;
-        const existing = weatherBuckets.get(key) ?? { sum: 0, count: 0 };
-        existing.sum += val;
-        existing.count += 1;
-        weatherBuckets.set(key, existing);
+        // const existing = weatherBuckets.get(key) ?? { sum: 0, count: 0 };
+        // existing.sum += val;
+        // existing.count += 1;
+        // weatherBuckets.set(key, existing);
+         weatherMap.set(key, val);
       }
 
-      weatherYData = dayKeys.map((k) => {
-        const b = weatherBuckets.get(k);
-        if (!b || b.count === 0) return null;
-        return Math.round((b.sum / b.count) * 100) / 100;
-      });
+      // weatherYData = dayKeys.map((k) => {
+      //   const b = weatherBuckets.get(k);
+      //   if (!b || b.count === 0) return null;
+      //   return Math.round((b.sum / b.count) * 100) / 100;
+      // });
+       weatherYData = dayKeys.map(k => weatherMap.get(k) ?? null);
     }
 
     return { xData, yData, weatherYData, unit };
