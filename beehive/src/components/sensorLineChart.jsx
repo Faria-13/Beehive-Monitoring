@@ -162,7 +162,7 @@ export default function SensorLineChartControlled({
 
     let weatherYData = dayKeys.map(() => null);
     if (showLocalWeather && weatherReadings) {
-      const weatherBuckets = new Map();
+      const weatherMap = new Map();
       for (const w of weatherReadings) {
         const key = dayjs(w.timestamp).format("YYYY-MM-DD");
         const val = Number(w.avg_temp);
@@ -171,7 +171,7 @@ export default function SensorLineChartControlled({
         // existing.sum += val;
         // existing.count += 1;
         // weatherBuckets.set(key, existing);
-         weatherMap.set(key, val);
+          weatherMap.set(key, val);
       }
 
       // weatherYData = dayKeys.map((k) => {
@@ -179,7 +179,7 @@ export default function SensorLineChartControlled({
       //   if (!b || b.count === 0) return null;
       //   return Math.round((b.sum / b.count) * 100) / 100;
       // });
-       weatherYData = dayKeys.map(k => weatherMap.get(k) ?? null);
+        weatherYData = dayKeys.map(k => weatherMap.get(k) ?? null);
     }
 
     return { xData, yData, weatherYData, unit };
