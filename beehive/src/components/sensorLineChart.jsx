@@ -160,30 +160,39 @@ export default function SensorLineChartControlled({
 
     const unit = readings.find((r) => r.unit)?.unit ?? "?";
 
-    let weatherYData = dayKeys.map(() => null);
-    if (showLocalWeather && weatherReadings) {
-      const weatherMap = new Map();
-      for (const w of weatherReadings) {
-        // const key = dayjs(w.timestamp).format("YYYY-MM-DD");
-        const key = dayjs(w.timestamp).local().format("YYYY-MM-DD");
-        const val = Number(w.avg_temp);
-        if (!Number.isFinite(val)) continue;
-        // const existing = weatherBuckets.get(key) ?? { sum: 0, count: 0 };
-        // existing.sum += val;
-        // existing.count += 1;
-        // weatherBuckets.set(key, existing);
-          weatherMap.set(key, val);
+    // let weatherYData = dayKeys.map(() => null);
+    // if (showLocalWeather && weatherReadings) {
+    //   const weatherMap = new Map(weatherReadings.map(w => [w.day, w.avg_temp]));
+    //   for (const w of weatherReadings) {
+    //     const key = dayjs(w.timestamp).format("YYYY-MM-DD");
+    //     const val = Number(w.avg_temp);
+    //     if (!Number.isFinite(val)) continue;
+    //     // const existing = weatherBuckets.get(key) ?? { sum: 0, count: 0 };
+    //     // existing.sum += val;
+    //     // existing.count += 1;
+    //     // weatherBuckets.set(key, existing);
+    //       weatherMap.set(key, val);
+    //   }
+
+    //   // weatherYData = dayKeys.map((k) => {
+    //   //   const b = weatherBuckets.get(k);
+    //   //   if (!b || b.count === 0) return null;
+    //   //   return Math.round((b.sum / b.count) * 100) / 100;
+    //   // });
+    //     weatherYData = dayKeys.map(k => weatherMap.get(k) ?? null);
+    // }
+
+    // return { xData, yData, weatherYData, unit };
+
+    // Prepare weather data if available
+      let weatherYData = dayKeys.map(() => null);
+
+      if (showLocalWeather && weatherReadings) {
+        const weatherMap = new Map(weatherReadings.map(w => [w.day, w.avg_temp]));
+        weatherYData = dayKeys.map(k => weatherMap.get(k) ?? null);
       }
 
-      // weatherYData = dayKeys.map((k) => {
-      //   const b = weatherBuckets.get(k);
-      //   if (!b || b.count === 0) return null;
-      //   return Math.round((b.sum / b.count) * 100) / 100;
-      // });
-        weatherYData = dayKeys.map(k => weatherMap.get(k) ?? null);
-    }
-
-    return { xData, yData, weatherYData, unit };
+      return { xData, yData, weatherYData, unit };
   }, [readings, weatherReadings, startDate, endDate, showLocalWeather]);
 
   const isReady =
