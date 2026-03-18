@@ -7,11 +7,15 @@
 #include <SensirionI2CScd4x.h>
 #include <SensirionCore.h>
 #include <RadioLib.h>
+#define BATTERY_PIN 1
+#define ADC_CTRL_PIN 37
 
 // -------------------- I2C / Sensors --------------------
 static const int SDA_PIN = 39;
 static const int SCL_PIN = 40;
 static const uint8_t SCD4X_ADDR = 0x62;
+
+
 
 Adafruit_BMP085 bmp;
 SensirionI2cScd4x scd4x;
@@ -256,9 +260,30 @@ void setup() {
       delay(2000);
     }
   }
+
+  pinMode(ADC_CTRL_PIN, OUTPUT);
+  digitalWrite(ADC_CTRL_PIN, HIGH);
+
+  analogReadResolution(12);
+  analogSetPinAttenuation(BATTERY_PIN, ADC_11db);
 }
 
 void loop() {
   readAndSend();
-  delay(60000);
+  // delay(60000);         //needs to change to be 10 minutes
+
+  int raw = analogRead(BATTERY_PIN);
+
+  Serial.print("Raw ADC: ");
+  Serial.println(raw);
+
+  float voltage = (raw / 4095.0) * 3.3 * 2.0;  // 2.0 = built-in divider
+
+  Serial.print("Battery Voltage: ");
+  Serial.print(voltage, 2);
+  Serial.println(" V");
+
+  delay(5000);
+
+  // deep sleep implementation 
 }
