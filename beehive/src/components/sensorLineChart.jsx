@@ -38,6 +38,8 @@ export default function SensorLineChartControlled({
     onEndDateChange(end);
   };
 
+  
+
   const handleStartChange = (v) => {
     if (!v || !v.isValid()) return;
 
@@ -86,6 +88,10 @@ export default function SensorLineChartControlled({
     let cancelled = false;
 
     async function load() {
+
+      const data = await fetchSensorReadingsByRange(sensorId, startISO, endISO);
+      console.log("fetched readings:", data.length, "first:", data[0]?.timestamp, "last:", data[data.length - 1]?.timestamp);
+      if (!cancelled) setReadings(data);
       try {
         setError(null);
         setReadings(null);
