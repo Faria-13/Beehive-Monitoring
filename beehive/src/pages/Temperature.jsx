@@ -2,6 +2,7 @@ import Box from "@mui/material/Box";
 import SensorDashboardRow from "../components/SensorDashboardRow";
 
 export default function Temperature() {
+  
   const sensorOptions = [
     { id: 4, label: "Temperature" },
     { id: 42, label: "Humidity" },
@@ -18,7 +19,7 @@ export default function Temperature() {
         selectedSensorId={4}
         sensorIds={sensorIds}
         sensorOptions={sensorOptions}
-        showLocalWeather={true}
+        showLocalWeather={false}
       />
     </Box>
   );

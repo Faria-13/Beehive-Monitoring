@@ -18,7 +18,7 @@ export default function Weight() {
         selectedSensorId={44}
         sensorIds={sensorIds}
         sensorOptions={sensorOptions}
-        showLocalWeather={null}
+        showLocalWeather={false}
       />
     </Box>
   );
