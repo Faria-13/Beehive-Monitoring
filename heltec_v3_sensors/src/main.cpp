@@ -9,6 +9,8 @@
 #include <RadioLib.h>
 #define BATTERY_PIN 1
 #define ADC_CTRL_PIN 37
+#define BATTERY_LOW_VOLTAGE 2.75
+#define BATTERY_HIGH_VOLTAGE 4.2
 
 // -------------------- I2C / Sensors --------------------
 static const int SDA_PIN = 39;
@@ -274,16 +276,16 @@ void loop() {
 
   int raw = analogRead(BATTERY_PIN);
 
-  Serial.print("Raw ADC: ");
-  Serial.println(raw);
 
-  float voltage = (raw / 4095.0) * 3.3 * 2.0;  // 2.0 = built-in divider
+  float voltage = (raw / 4095.0) * 3.3;  
+  float batteryVoltage = voltage * 5.1; 
 
-  Serial.print("Battery Voltage: ");
-  Serial.print(voltage, 2);
-  Serial.println(" V");
+  float percent = (batteryVoltage - BATTERY_LOW_VOLTAGE)/(BATTERY_HIGH_VOLTAGE - BATTERY_LOW_VOLTAGE) * 100;
+  Serial.println("Battery Level: ");
+  Serial.print(percent, 1);
+  Serial.println("%");
 
-  delay(5000);
+  delay(45000);
 
   // deep sleep implementation 
 }
