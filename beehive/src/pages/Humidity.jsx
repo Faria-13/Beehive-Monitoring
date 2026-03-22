@@ -15,6 +15,7 @@ export default function Humidity() {
   return (
     <Box sx={{ px: 2, py: 2, maxWidth: 1400, mx: "auto" }}>
       <SensorDashboardRow
+      key="humidity"
         selectedSensorId={42}
         sensorIds={sensorIds}
         sensorOptions={sensorOptions}

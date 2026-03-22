@@ -15,6 +15,7 @@ export default function Volume() {
   return (
     <Box sx={{ px: 2, py: 2, maxWidth: 1400, mx: "auto" }}>
       <SensorDashboardRow
+      key="volume"
         selectedSensorId={80}
         sensorIds={sensorIds}
         sensorOptions={sensorOptions}
