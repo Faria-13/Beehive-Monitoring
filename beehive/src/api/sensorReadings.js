@@ -8,7 +8,8 @@ export async function fetchSensorReadingsByRange(sensorId, startISO, endISO) {
     .eq("is_valid", true)
     .gte("timestamp", startISO)
     .lte("timestamp", endISO)
-    .order("timestamp", { ascending: true });
+    .order("timestamp", { ascending: true })
+    .range(0, 9999); // safety limit to prevent overload
 
   if (error) throw error;
   return data ?? [];
