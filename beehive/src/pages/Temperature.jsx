@@ -15,7 +15,7 @@ export default function Temperature() {
   return (
     <Box sx={{ px: 2, py: 2, maxWidth: 1400, mx: "auto" }}>
       <SensorDashboardRow
-        selectedSensorId={41}
+        selectedSensorId={4}
         sensorIds={sensorIds}
         sensorOptions={sensorOptions}
         showLocalWeather={true}
