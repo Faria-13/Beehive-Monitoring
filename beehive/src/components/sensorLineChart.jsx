@@ -14,7 +14,7 @@ import dayjs from "dayjs";
 import { fetchSensorReadingsByRange, fetchSensorMeta } from "../api/sensorReadings";
 import { fetchWeatherByRange } from "../api/weather";
 
-import dayjs from "dayjs";
+
 import utc from "dayjs/plugin/utc";
 dayjs.extend(utc);
 
