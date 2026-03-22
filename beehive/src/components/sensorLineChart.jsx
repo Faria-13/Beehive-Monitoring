@@ -319,7 +319,7 @@ export default function SensorLineChartControlled({
                 },
                 {
                   id: "weather",
-                  data: showLocalWeather ? chartData.weatherYData : chartData.weatherYData.map(() => null),
+                  data: chartData.weatherYData,
                   label: "Local Weather (°C)",
                   valueFormatter: (value) => (value == null ? "NaN" : value.toFixed(2)),
                   color: "#FE5C05",

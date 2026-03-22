@@ -18,7 +18,7 @@ export default function Volume() {
         selectedSensorId={80}
         sensorIds={sensorIds}
         sensorOptions={sensorOptions}
-        showLocalWeather={false}
+    
       />
     </Box>
   );
