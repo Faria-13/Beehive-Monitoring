@@ -6,7 +6,7 @@ export default function Humidity() {
     { id: 4, label: "Temperature" },
     { id: 3, label: "Humidity" },
     { id: 44, label: "Weight" },
-    { id: 68, label: "Carbon" },
+    { id: 1, label: "Carbon" },
     { id: 80, label: "Volume" },
   ];
 

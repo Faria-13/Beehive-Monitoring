@@ -5,9 +5,9 @@ export default function Temperature() {
   
   const sensorOptions = [
     { id: 4, label: "Temperature" },
-    { id: 42, label: "Humidity" },
+    { id: 3, label: "Humidity" },
     { id: 44, label: "Weight" },
-    { id: 68, label: "Carbon" },
+    { id: 1, label: "Carbon" },
     { id: 80, label: "Volume" },
   ];
 
