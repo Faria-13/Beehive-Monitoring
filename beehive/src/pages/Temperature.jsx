@@ -19,7 +19,7 @@ export default function Temperature() {
         selectedSensorId={4}
         sensorIds={sensorIds}
         sensorOptions={sensorOptions}
-        showLocalWeather={false}
+        showLocalWeather={true}
       />
     </Box>
   );
