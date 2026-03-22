@@ -15,6 +15,7 @@ export default function Weight() {
   return (
     <Box sx={{ px: 2, py: 2, maxWidth: 1400, mx: "auto" }}>
       <SensorDashboardRow
+        key="weight"
         selectedSensorId={44}
         sensorIds={sensorIds}
         sensorOptions={sensorOptions}
