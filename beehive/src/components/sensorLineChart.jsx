@@ -310,21 +310,25 @@ export default function SensorLineChartControlled({
                 },
               ]}
               series={[
-                {
-                  id: "hive",
-                  data: chartData.yData,
-                  label: `Hive ${sensorType} (${chartData.unit})`,
-                  valueFormatter: (value) => (value == null ? "NaN" : value.toFixed(2)),
-                  color: "#FE9805",
-                },
-                {
-                  id: "weather",
-                  data: chartData.weatherYData,
-                  label: "Local Weather (°C)",
-                  valueFormatter: (value) => (value == null ? "NaN" : value.toFixed(2)),
-                  color: "#FE5C05",
-                },
-              ]}
+                  {
+                    id: "hive",
+                    data: chartData.yData,
+                    label: `Hive ${sensorType} (${chartData.unit})`,
+                    valueFormatter: (value) => (value == null ? "NaN" : value.toFixed(2)),
+                    color: "#FE9805",
+                  },
+                  ...(showLocalWeather
+                    ? [
+                        {
+                          id: "weather",
+                          data: chartData.weatherYData,
+                          label: "Local Weather (°C)",
+                          valueFormatter: (value) => (value == null ? "NaN" : value.toFixed(2)),
+                          color: "#FE5C05",
+                        },
+                      ]
+                    : []),
+                ]}
               height={300}
             />
           </div>
