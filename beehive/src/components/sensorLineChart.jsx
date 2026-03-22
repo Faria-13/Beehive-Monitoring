@@ -23,7 +23,11 @@ export default function SensorLineChartControlled({
   endDate,
   onStartDateChange,
   onEndDateChange,
-}) {
+}) 
+{
+console.log("SensorLineChartControlled mounted, showLocalWeather:", showLocalWeather);
+}
+{
   const WINDOW_DAYS = 14;
 
   const [readings, setReadings] = useState(null);
