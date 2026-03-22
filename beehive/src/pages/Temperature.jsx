@@ -3,7 +3,7 @@ import SensorDashboardRow from "../components/SensorDashboardRow";
 
 export default function Temperature() {
   const sensorOptions = [
-    { id: 41, label: "Temperature" },
+    { id: 4, label: "Temperature" },
     { id: 42, label: "Humidity" },
     { id: 44, label: "Weight" },
     { id: 68, label: "Carbon" },
