@@ -49,7 +49,7 @@ export default function SensorDashboardRow({
           endDate={endDate}
           onStartDateChange={setStartDate}
           onEndDateChange={setEndDate}
-          showLocalWeather={showLocalWeather}
+          showLocalWeather={showLocalWeather && activeSensorId === selectedSensorId}
         />
       </Box>
     </Stack>
