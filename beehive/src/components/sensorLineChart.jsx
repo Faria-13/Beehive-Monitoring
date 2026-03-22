@@ -109,7 +109,9 @@ export default function SensorLineChartControlled({
         if (showLocalWeather) {
           const weatherData = await fetchWeatherByRange(startISO, endISO);
           if (!cancelled) setWeatherReadings(weatherData);
-        }
+        }else {
+  if (!cancelled) setWeatherReadings(null); // 👈 clear stale data
+}
       } catch (e) {
         if (!cancelled) {
           setError(e?.message ?? "Failed to load readings");

@@ -18,6 +18,7 @@ export default function Humidity() {
         selectedSensorId={42}
         sensorIds={sensorIds}
         sensorOptions={sensorOptions}
+        showLocalWeather={false}
       />
     </Box>
   );

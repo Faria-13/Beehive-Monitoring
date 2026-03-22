@@ -18,6 +18,7 @@ export default function Carbon() {
         selectedSensorId={68}
         sensorIds={sensorIds}
         sensorOptions={sensorOptions}
+        showLocalWeather={false}
       />
     </Box>
   );
