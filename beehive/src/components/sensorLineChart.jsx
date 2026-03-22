@@ -14,6 +14,10 @@ import dayjs from "dayjs";
 import { fetchSensorReadingsByRange, fetchSensorMeta } from "../api/sensorReadings";
 import { fetchWeatherByRange } from "../api/weather";
 
+import dayjs from "dayjs";
+import utc from "dayjs/plugin/utc";
+dayjs.extend(utc);
+
 export default function SensorLineChartControlled({
   sensorId,
   sensorOptions = [],
@@ -149,7 +153,8 @@ export default function SensorLineChartControlled({
 
     const buckets = new Map();
     for (const r of readings) {
-      const key = dayjs(r.timestamp).format("YYYY-MM-DD");
+      // const key = dayjs(r.timestamp).format("YYYY-MM-DD");
+      const key = dayjs(r.timestamp).utc().format("YYYY-MM-DD");
       const val = Number(r.value);
       if (!Number.isFinite(val)) continue;
       const existing = buckets.get(key) ?? { sum: 0, count: 0 };
