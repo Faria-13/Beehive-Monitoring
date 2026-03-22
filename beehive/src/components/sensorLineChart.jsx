@@ -158,6 +158,9 @@ export default function SensorLineChartControlled({
       buckets.set(key, existing);
     }
 
+    console.log("bucket for Mar 18:", buckets.get("2026-03-18"));
+  console.log("bucket for Mar 19:", buckets.get("2026-03-19"));
+
     const xData = dayKeys.map((k) => dayjs(k).toDate());
     const yData = dayKeys.map((k) => {
       const b = buckets.get(k);
