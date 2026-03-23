@@ -112,7 +112,18 @@ export default function SensorLineChartControlled({
         const endISO = safeEnd.endOf("day").toISOString();
 
         const data = await fetchSensorReadingsByRange(sensorId, startISO, endISO);
-        console.log("fetched readings:", data.length, "first:", data[0]?.timestamp, "last:", data[data.length - 1]?.timestamp);
+        //console.log("fetched readings:", data.length, "first:", data[0]?.timestamp, "last:", data[data.length - 1]?.timestamp);
+
+
+        // Log the latest 10 readings for demo 
+        if (data && data.length > 0) {
+          const latestTen = [...data]
+            .sort((a, b) => dayjs(b.timestamp).valueOf() - dayjs(a.timestamp).valueOf())
+            .slice(0, 10);
+          
+          console.log(`%c Latest 10 Readings for Sensor ${sensorId}:`, "color: #FE9805; font-weight: bold;");
+          console.table(latestTen);
+        }
         if (!cancelled) setReadings(data);
 
         if (showLocalWeather) {
