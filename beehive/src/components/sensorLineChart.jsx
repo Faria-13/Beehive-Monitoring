@@ -119,7 +119,12 @@ export default function SensorLineChartControlled({
         if (data && data.length > 0) {
           const latestTen = [...data]
             .sort((a, b) => dayjs(b.timestamp).valueOf() - dayjs(a.timestamp).valueOf())
-            .slice(0, 10);
+            .slice(0, 10)
+            .map(r => ({
+            ...r,
+            // This converts UTC to EST
+            timestamp: dayjs(r.timestamp).format('MM/DD/YYYY h:mm:ss A'),
+            }));
           
           console.log(`%c Latest 10 Readings for Sensor ${sensorId}:`, "color: #FE9805; font-weight: bold;");
           console.table(latestTen);
@@ -174,8 +179,7 @@ export default function SensorLineChartControlled({
       buckets.set(key, existing);
     }
 
-    console.log("bucket for Mar 18:", buckets.get("2026-03-18"));
-  console.log("bucket for Mar 19:", buckets.get("2026-03-19"));
+    
 
     const xData = dayKeys.map((k) => dayjs(k).toDate());
     const yData = dayKeys.map((k) => {
