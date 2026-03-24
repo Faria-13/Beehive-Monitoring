@@ -22,6 +22,10 @@ static const uint8_t SCD4X_ADDR = 0x62;
 Adafruit_BMP085 bmp;
 SensirionI2cScd4x scd4x;
 
+// Define the sleep time in microseconds
+#define uS_TO_S_FACTOR 1000000ULL  /* Conversion factor for micro seconds to seconds */
+#define TIME_TO_SLEEP  600         /* Time ESP32 will go to sleep (in seconds) - 10 minutes */
+
 // -------------------- Heltec WiFi LoRa 32 V3 SX1262 --------------------
 static const int LORA_CS   = 8;
 static const int LORA_SCK  = 9;
@@ -272,7 +276,6 @@ void setup() {
 
 void loop() {
   readAndSend();
-  // delay(60000);         //needs to change to be 10 minutes
 
   int raw = analogRead(BATTERY_PIN);
 
@@ -285,7 +288,18 @@ void loop() {
   Serial.print(percent, 1);
   Serial.println("%");
 
-  delay(45000);
+  
+
+  // 3. Prepare for Deep Sleep
+  Serial.println("Entering deep sleep for 10 minutes...");
+  Serial.flush(); // Ensure all serial data is printed before CPU stops
+
+  // Power down high-current pins if necessary
+  digitalWrite(ADC_CTRL_PIN, LOW); 
+
+  // Set the timer and go to sleep
+  esp_sleep_enable_timer_wakeup(TIME_TO_SLEEP * uS_TO_S_FACTOR);
+  esp_deep_sleep_start();
 
   // deep sleep implementation 
 }
