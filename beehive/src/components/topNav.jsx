@@ -21,7 +21,7 @@ export default function WebsiteNav() {
           <Button color="inherit" component={RouterLink} to="/">
             Your Hive
           </Button>
-          <Button color="inherit" href="#" onClick={prevent}>
+          <Button color="inherit" component={RouterLink} to="/alerts">
             Alerts
           </Button>
           <Button color="inherit" href="#" onClick={prevent}>
