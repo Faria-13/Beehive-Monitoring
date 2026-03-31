@@ -10,7 +10,7 @@
 #include <RadioLib.h>
 #define BATTERY_PIN 1
 #define ADC_CTRL_PIN 37
-#define BATTERY_LOW_VOLTAGE 2.75
+#define BATTERY_LOW_VOLTAGE 3.1
 #define BATTERY_HIGH_VOLTAGE 4.2
 
 // -------------------- I2C / Sensors --------------------
@@ -148,6 +148,8 @@ bool initRadio() {
   SPI.begin(LORA_SCK, LORA_MISO, LORA_MOSI, LORA_CS);
 
   int16_t state = radio.begin();
+  radio.setOutputPower(22);
+  radio.setSpreadingFactor(12);
   Serial.print("radio.begin() = ");
   Serial.println(state);
 
