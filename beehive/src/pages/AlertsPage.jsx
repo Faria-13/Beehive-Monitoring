@@ -1,6 +1,9 @@
 import { useEffect, useState, useCallback } from "react";
 import { supabase } from "../createClient";
 
+// ─── Config ─────────────────────────────────────────────────────────────────
+const HIVE_ID = 101; // hardcoded until auth is ready
+
 // ─── helpers ────────────────────────────────────────────────────────────────
 
 const LEVEL_META = {
@@ -24,6 +27,13 @@ const LEVEL_META = {
     border: "rgba(77,166,255,0.35)",
     label: "INFO",
     icon: "ℹ",
+  },
+  offline: {
+    color: "#9E9E9E",
+    bg: "rgba(158,158,158,0.10)",
+    border: "rgba(158,158,158,0.35)",
+    label: "OFFLINE",
+    icon: "📡",
   },
 };
 
@@ -87,13 +97,11 @@ function AlertRow({ alert, onAcknowledge, onResolve }) {
       style={{
         ...styles.alertRow,
         background: meta.bg,
-        borderLeft: `4px solid ${meta.color}`,
         border: `1px solid ${meta.border}`,
         borderLeft: `4px solid ${meta.color}`,
         opacity: alert.resolved ? 0.55 : 1,
       }}
     >
-      {/* left: icon + level */}
       <div style={styles.alertLevel}>
         <span style={{ color: meta.color, fontSize: 20 }}>{meta.icon}</span>
         <span style={{ ...styles.levelBadge, color: meta.color, borderColor: meta.border }}>
@@ -101,7 +109,6 @@ function AlertRow({ alert, onAcknowledge, onResolve }) {
         </span>
       </div>
 
-      {/* middle: message + meta */}
       <div style={styles.alertBody}>
         <div style={styles.alertMessage}>{alert.message}</div>
         <div style={styles.alertMeta}>
@@ -119,7 +126,6 @@ function AlertRow({ alert, onAcknowledge, onResolve }) {
         </div>
       </div>
 
-      {/* right: actions */}
       <div style={styles.alertActions}>
         {!alert.acknowledged && !alert.resolved && (
           <button
@@ -144,19 +150,65 @@ function AlertRow({ alert, onAcknowledge, onResolve }) {
   );
 }
 
+// ─── Offline row ─────────────────────────────────────────────────────────────
+
+function OfflineRow({ notification }) {
+  const meta = LEVEL_META.offline;
+  const isPending = notification.delivery_status === "pending";
+
+  return (
+    <div
+      style={{
+        ...styles.alertRow,
+        background: meta.bg,
+        border: `1px solid ${meta.border}`,
+        borderLeft: `4px solid ${meta.color}`,
+        opacity: isPending ? 1 : 0.55,
+      }}
+    >
+      <div style={styles.alertLevel}>
+        <span style={{ color: meta.color, fontSize: 20 }}>{meta.icon}</span>
+        <span style={{ ...styles.levelBadge, color: meta.color, borderColor: meta.border }}>
+          {meta.label}
+        </span>
+      </div>
+
+      <div style={styles.alertBody}>
+        <div style={styles.alertMessage}>
+          Sensor {notification.sensor_id} — no data received
+        </div>
+        <div style={styles.alertMeta}>
+          <span>🐝 Hive {notification.hive_id}</span>
+          <span>🕐 Last seen: {fmtTime(notification.last_reading_timestamp)}</span>
+          <span
+            style={{
+              color: isPending ? "#FE9805" : "#66BB6A",
+              fontWeight: 600,
+            }}
+          >
+            {isPending ? "⏳ Pending" : "✅ Delivered"}
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Page ───────────────────────────────────────────────────────────────
 
 export default function AlertsPage() {
   const [alerts, setAlerts] = useState([]);
+  const [offline, setOffline] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState("all"); // all | critical | warning | info | unresolved
+  const [filter, setFilter] = useState("all");
   const [toasts, setToasts] = useState([]);
 
-  // ── fetch ──
+  // ── fetch alerts ──
   const fetchAlerts = useCallback(async () => {
     const { data, error } = await supabase
       .from("alerts")
       .select("*")
+      .eq("hive_id", HIVE_ID)
       .order("timestamp", { ascending: false })
       .limit(200);
 
@@ -164,37 +216,66 @@ export default function AlertsPage() {
     setLoading(false);
   }, []);
 
+  // ── fetch offline notifications ──
+  const fetchOffline = useCallback(async () => {
+    const { data, error } = await supabase
+      .from("notifications")
+      .select("*")
+      .eq("hive_id", HIVE_ID)
+      .eq("notification_type", "no_data")
+      .order("created_at", { ascending: false })
+      .limit(50);
+
+    if (!error && data) setOffline(data);
+  }, []);
+
   useEffect(() => {
     fetchAlerts();
-  }, [fetchAlerts]);
+    fetchOffline();
+  }, [fetchAlerts, fetchOffline]);
 
   // ── realtime ──
   useEffect(() => {
     const channel = supabase
       .channel("alerts-page-live")
+      // alerts table
       .on(
         "postgres_changes",
-        { event: "*", schema: "public", table: "alerts" },
+        { event: "*", schema: "public", table: "alerts", filter: `hive_id=eq.${HIVE_ID}` },
         (payload) => {
           if (payload.eventType === "INSERT") {
             const newAlert = payload.new;
             setAlerts((prev) => [newAlert, ...prev]);
-
-            // show toast
             const toastId = Date.now();
             setToasts((prev) => [...prev, { ...newAlert, id: toastId }]);
-            setTimeout(() => {
-              setToasts((prev) => prev.filter((t) => t.id !== toastId));
-            }, 6000);
+            setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== toastId)), 6000);
           }
-
           if (payload.eventType === "UPDATE") {
             setAlerts((prev) =>
-              prev.map((a) =>
-                a.alert_id === payload.new.alert_id ? payload.new : a
-              )
+              prev.map((a) => (a.alert_id === payload.new.alert_id ? payload.new : a))
             );
           }
+        }
+      )
+      // notifications table (sensor offline)
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "notifications", filter: `hive_id=eq.${HIVE_ID}` },
+        (payload) => {
+          const n = payload.new;
+          if (n.notification_type !== "no_data") return;
+          setOffline((prev) => [n, ...prev]);
+          const toastId = Date.now();
+          setToasts((prev) => [
+            ...prev,
+            {
+              id: toastId,
+              hive_id: n.hive_id,
+              alert_level: "warning",
+              message: `Sensor ${n.sensor_id} offline — last seen ${fmtTime(n.last_reading_timestamp)}`,
+            },
+          ]);
+          setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== toastId)), 6000);
         }
       )
       .subscribe();
@@ -223,22 +304,25 @@ export default function AlertsPage() {
   };
 
   // ── filter ──
-  const filtered = alerts.filter((a) => {
-    if (filter === "unresolved") return !a.resolved;
-    if (filter === "all") return true;
-    return a.alert_level === filter;
-  });
+  const filtered = (() => {
+    if (filter === "offline") return [];
+    if (filter === "unresolved") return alerts.filter((a) => !a.resolved);
+    if (filter === "all") return alerts;
+    return alerts.filter((a) => a.alert_level === filter);
+  })();
+
+  const showOffline = filter === "all" || filter === "offline";
 
   // ── counts ──
   const counts = {
     critical: alerts.filter((a) => a.alert_level === "critical" && !a.resolved).length,
     warning: alerts.filter((a) => a.alert_level === "warning" && !a.resolved).length,
     info: alerts.filter((a) => a.alert_level === "info" && !a.resolved).length,
+    offline: offline.filter((n) => n.delivery_status === "pending").length,
   };
 
   return (
     <>
-      {/* Toast layer */}
       <Toast toasts={toasts} onDismiss={(id) => setToasts((p) => p.filter((t) => t.id !== id))} />
 
       <div style={styles.page}>
@@ -246,13 +330,12 @@ export default function AlertsPage() {
         <div style={styles.header}>
           <div>
             <h1 style={styles.title}>🐝 Alert Center</h1>
-            <p style={styles.subtitle}>Live monitoring across all hives</p>
+            <p style={styles.subtitle}>Hive {HIVE_ID} — live monitoring</p>
           </div>
 
-          {/* Summary badges */}
           <div style={styles.summaryRow}>
             {Object.entries(counts).map(([level, count]) => {
-              const meta = LEVEL_META[level];
+              const meta = LEVEL_META[level] ?? LEVEL_META.info;
               return (
                 <div
                   key={level}
@@ -262,12 +345,8 @@ export default function AlertsPage() {
                     background: meta.bg,
                   }}
                 >
-                  <span style={{ color: meta.color, fontWeight: 700, fontSize: 22 }}>
-                    {count}
-                  </span>
-                  <span style={{ color: meta.color, fontSize: 11, letterSpacing: 1 }}>
-                    {meta.label}
-                  </span>
+                  <span style={{ color: meta.color, fontWeight: 700, fontSize: 22 }}>{count}</span>
+                  <span style={{ color: meta.color, fontSize: 11, letterSpacing: 1 }}>{meta.label}</span>
                 </div>
               );
             })}
@@ -276,16 +355,17 @@ export default function AlertsPage() {
 
         {/* Filter tabs */}
         <div style={styles.filterRow}>
-          {["all", "unresolved", "critical", "warning", "info"].map((f) => (
+          {["all", "unresolved", "critical", "warning", "info", "offline"].map((f) => (
             <button
               key={f}
-              style={{
-                ...styles.filterBtn,
-                ...(filter === f ? styles.filterBtnActive : {}),
-              }}
+              style={{ ...styles.filterBtn, ...(filter === f ? styles.filterBtnActive : {}) }}
               onClick={() => setFilter(f)}
             >
-              {f === "all" ? "All" : f === "unresolved" ? "Unresolved" : LEVEL_META[f].label}
+              {f === "all"
+                ? "All"
+                : f === "unresolved"
+                ? "Unresolved"
+                : (LEVEL_META[f]?.label ?? f)}
             </button>
           ))}
         </div>
@@ -294,19 +374,32 @@ export default function AlertsPage() {
         <div style={styles.list}>
           {loading ? (
             <div style={styles.empty}>Loading alerts…</div>
-          ) : filtered.length === 0 ? (
-            <div style={styles.empty}>
-              {filter === "unresolved" ? "✅ All clear — no unresolved alerts!" : "No alerts found."}
-            </div>
           ) : (
-            filtered.map((alert) => (
-              <AlertRow
-                key={alert.alert_id}
-                alert={alert}
-                onAcknowledge={() => acknowledge(alert.alert_id)}
-                onResolve={() => resolve(alert.alert_id)}
-              />
-            ))
+            <>
+              {/* Offline sensor rows */}
+              {showOffline &&
+                offline.map((n, i) => <OfflineRow key={i} notification={n} />)}
+
+              {/* Regular alerts */}
+              {filtered.length === 0 && !showOffline ? (
+                <div style={styles.empty}>
+                  {filter === "unresolved" ? "✅ All clear — no unresolved alerts!" : "No alerts found."}
+                </div>
+              ) : (
+                filtered.map((alert) => (
+                  <AlertRow
+                    key={alert.alert_id}
+                    alert={alert}
+                    onAcknowledge={() => acknowledge(alert.alert_id)}
+                    onResolve={() => resolve(alert.alert_id)}
+                  />
+                ))
+              )}
+
+              {showOffline && offline.length === 0 && filtered.length === 0 && (
+                <div style={styles.empty}>✅ All clear — no alerts!</div>
+              )}
+            </>
           )}
         </div>
       </div>
@@ -456,7 +549,6 @@ const styles = {
     color: "#4CAF50",
     border: "1px solid rgba(102,187,106,0.4)",
   },
-  // Toast
   toastContainer: {
     position: "fixed",
     bottom: 24,
