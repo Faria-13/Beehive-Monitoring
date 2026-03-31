@@ -1,3 +1,4 @@
+
 #include <Arduino.h>
 #include <Wire.h>
 #include <SPI.h>
@@ -24,7 +25,8 @@ SensirionI2cScd4x scd4x;
 
 // Define the sleep time in microseconds
 #define uS_TO_S_FACTOR 1000000ULL  /* Conversion factor for micro seconds to seconds */
-#define TIME_TO_SLEEP  600         /* Time ESP32 will go to sleep (in seconds) - 10 minutes */
+#define TIME_TO_SLEEP  3  
+#define TIME_TO_SLEEP_IN_SEC  (TIME_TO_SLEEP * 60)       
 
 // -------------------- Heltec WiFi LoRa 32 V3 SX1262 --------------------
 static const int LORA_CS   = 8;
@@ -84,28 +86,25 @@ static uint16_t retrySensirion(Func f, int attempts, uint32_t delayMs) {
 static void packPayload(
   uint8_t *payload,
   uint16_t co2,
-  float scdTemp,
+  float batteryPercent,
   float rh,
-  float bmpTemp,
-  int32_t pressurePa
+  float bmpTemp
 ) {
-  int16_t scdT = (int16_t)lroundf(scdTemp * 100.0f);
+  int16_t battPct = (int16_t)lroundf(batteryPercent * 100.0f);
   uint16_t hum = (uint16_t)lroundf(rh * 100.0f);
   int16_t bmpT = (int16_t)lroundf(bmpTemp * 100.0f);
-  uint32_t prs = (uint32_t)pressurePa;
 
-  payload[0]  = co2 & 0xFF;
-  payload[1]  = (co2 >> 8) & 0xFF;
+  payload[0] = co2 & 0xFF;
+  payload[1] = (co2 >> 8) & 0xFF;
 
-  payload[2]  = scdT & 0xFF;
-  payload[3]  = (scdT >> 8) & 0xFF;
+  payload[2] = battPct & 0xFF;
+  payload[3] = (battPct >> 8) & 0xFF;
 
-  payload[4]  = hum & 0xFF;
-  payload[5]  = (hum >> 8) & 0xFF;
+  payload[4] = hum & 0xFF;
+  payload[5] = (hum >> 8) & 0xFF;
 
-  payload[6]  = bmpT & 0xFF;
-  payload[7]  = (bmpT >> 8) & 0xFF;
-
+  payload[6] = bmpT & 0xFF;
+  payload[7] = (bmpT >> 8) & 0xFF;
 }
 
 bool initSensors() {
@@ -195,6 +194,28 @@ bool joinNetwork() {
   return false;
 }
 
+static float readBatteryPercent() {
+  digitalWrite(ADC_CTRL_PIN, HIGH);
+  delay(10);
+
+  int raw = analogRead(BATTERY_PIN);
+
+  float voltage = (raw / 4095.0f) * 3.3f;
+  float batteryVoltage = voltage * 5.1f;
+
+  float percent =
+    ((batteryVoltage - BATTERY_LOW_VOLTAGE) /
+    (BATTERY_HIGH_VOLTAGE - BATTERY_LOW_VOLTAGE)) * 100.0f;
+
+  Serial.print("Battery percent: ");
+  Serial.print(percent, 1);
+  Serial.println("%");
+
+  digitalWrite(ADC_CTRL_PIN, LOW);
+
+  return percent;
+}
+
 bool readAndSend() {
   bool dataReady = false;
   uint16_t err = scd4x.getDataReadyStatus(dataReady);
@@ -221,9 +242,10 @@ bool readAndSend() {
 
   float bmpTemp = bmp.readTemperature();
   int32_t pressure = bmp.readPressure();
+  float batteryPercent = readBatteryPercent();
 
   uint8_t payload[11];
-  packPayload(payload, co2, scdTemp, humidity, bmpTemp, pressure);
+  packPayload(payload, co2, batteryPercent, humidity, bmpTemp);
 
   Serial.println("Sending uplink...");
   int16_t state = node.sendReceive(payload, sizeof(payload), FPORT);
@@ -277,18 +299,7 @@ void setup() {
 void loop() {
   readAndSend();
 
-  int raw = analogRead(BATTERY_PIN);
-
-
-  float voltage = (raw / 4095.0) * 3.3;  
-  float batteryVoltage = voltage * 5.1; 
-
-  float percent = (batteryVoltage - BATTERY_LOW_VOLTAGE)/(BATTERY_HIGH_VOLTAGE - BATTERY_LOW_VOLTAGE) * 100;
-  Serial.println("Battery Level: ");
-  Serial.print(percent, 1);
-  Serial.println("%");
-
-  
+  // delay(60000);
 
   // 3. Prepare for Deep Sleep
   Serial.println("Entering deep sleep for 10 minutes...");
@@ -298,7 +309,7 @@ void loop() {
   digitalWrite(ADC_CTRL_PIN, LOW); 
 
   // Set the timer and go to sleep
-  esp_sleep_enable_timer_wakeup(TIME_TO_SLEEP * uS_TO_S_FACTOR);
+  esp_sleep_enable_timer_wakeup(TIME_TO_SLEEP_IN_SEC * uS_TO_S_FACTOR);
   esp_deep_sleep_start();
 
   // deep sleep implementation 
