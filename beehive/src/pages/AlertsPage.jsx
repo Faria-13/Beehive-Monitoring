@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from "react";
 import { supabase } from "../createClient";
 
 // ─── Config ─────────────────────────────────────────────────────────────────
-const HIVE_ID = 28; // hardcoded until auth is ready
+const HIVE_ID = 41; // hardcoded until auth is ready
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
