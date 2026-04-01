@@ -148,8 +148,11 @@ bool initRadio() {
   SPI.begin(LORA_SCK, LORA_MISO, LORA_MOSI, LORA_CS);
 
   int16_t state = radio.begin();
-  radio.setOutputPower(22);
+  radio.setCurrentLimit(140.0);
+  radio.setOutputPower(26);
+
   radio.setSpreadingFactor(12);
+  radio.setBandwidth(125.0);
   Serial.print("radio.begin() = ");
   Serial.println(state);
 
@@ -246,7 +249,7 @@ bool readAndSend() {
   int32_t pressure = bmp.readPressure();
   float batteryPercent = readBatteryPercent();
 
-  uint8_t payload[11];
+  uint8_t payload[8];
   packPayload(payload, co2, batteryPercent, humidity, bmpTemp);
 
   Serial.println("Sending uplink...");
