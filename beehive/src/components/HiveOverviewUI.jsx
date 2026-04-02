@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { Link } from "react-router-dom";
 import {
   AppBar,
@@ -10,6 +10,68 @@ import {
   Button,
 } from "@mui/material";
 import ArrowRightIcon from "@mui/icons-material/ArrowRight";
+
+function HiveAvatar({ hive }) {
+  const [hovered, setHovered] = useState(false);
+
+  const imageSrc = hive.avatarUrl || hive.fallbackIcon;
+  const bgColor = hive.avatarBgColor ?? "#FE9805";
+  
+  return (
+    <Box
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      sx={{
+        width: "100%",
+        height: "100%",
+        border: "2px solid black",
+        borderRadius: "11px",
+        backgroundColor: bgColor,
+        position: "relative",
+        overflow: "hidden",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        flexShrink: 0,
+      }}
+    >
+      <Box
+        component="img"
+        src={imageSrc}
+        alt={`${hive.name} avatar`}
+        sx={{
+          width: "72%",
+          height: "72%",
+          objectFit: "contain",
+        }}
+      />
+
+      {hovered && (
+        <Box
+          sx={{
+            position: "absolute",
+            inset: 0,
+            backgroundColor: "rgba(255,255,255,0.45)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            cursor: "pointer",
+          }}
+        >
+          <Typography
+            sx={{
+              fontSize: "0.85rem",
+              fontWeight: 600,
+              color: "black",
+            }}
+          >
+            edit
+          </Typography>
+        </Box>
+      )}
+    </Box>
+  );
+}
 
 function NavBar({
   appTitle = "DUBAI Hive Monitoring",
@@ -134,15 +196,9 @@ function HiveCard({ hive }) {
           left: 21,
           width: 108,
           height: 108,
-          bgcolor: "white",
-          border: "2px solid black",
-          borderRadius: "11px",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
         }}
       >
-        {hive.icon ?? null}
+        <HiveAvatar hive={hive} />
       </Box>
 
       <Stack
@@ -268,10 +324,7 @@ export default function HiveOverviewUI({
 
         <Stack direction="row" spacing={3} justifyContent="center" flexWrap="wrap">
           {hives.map((hive) => (
-            <HiveCard
-              key={hive.hive_id ?? hive.name}
-              hive={hive}
-            />
+            <HiveCard key={hive.hive_id ?? hive.name} hive={hive} />
           ))}
         </Stack>
       </Box>

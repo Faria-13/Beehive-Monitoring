@@ -5,6 +5,12 @@ import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
 import HiveOverviewUI from "../components/HiveOverviewUI";
 
+import beeIcon from "../assets/beeIcon.png";
+import beeIcon2 from "../assets/beeIcon2.png";
+
+const DEFAULT_BG_COLORS = ["#FE9805", "#FBC139", "#FFF3D0", "#FBDA7D"];
+const DEFAULT_ICONS = [beeIcon, beeIcon2];
+
 export default function HiveOverview() {
   const { user } = useAuth();
 
@@ -33,7 +39,12 @@ export default function HiveOverview() {
 
         const { data: hiveData, error: hiveError } = await supabase
           .from("beehives")
-          .select("*")
+          .select(`
+            *,
+            avatar_type,
+            avatar_storage_path,
+            avatar_bg_color
+          `)
           .eq("owner_id", userData.user_id);
 
         if (hiveError) throw hiveError;
@@ -41,7 +52,7 @@ export default function HiveOverview() {
         const safeHives = hiveData ?? [];
 
         const enrichedHives = await Promise.all(
-          safeHives.map(async (hive) => {
+          safeHives.map(async (hive, index) => {
             try {
               const { data: boards, error: boardsError } = await supabase
                 .from("iot_boards")
@@ -52,57 +63,80 @@ export default function HiveOverview() {
 
               const boardIds = (boards ?? []).map((board) => board.board_id);
 
-              if (boardIds.length === 0) {
-                return {
-                  ...hive,
-                  currentTemp: null,
-                  tempUnit: null,
-                };
+              let currentTemp = null;
+              let tempUnit = null;
+
+              if (boardIds.length > 0) {
+                const { data: tempSensors, error: sensorsError } = await supabase
+                  .from("sensors")
+                  .select("sensor_id, sensor_type, unit")
+                  .in("board_id", boardIds)
+                  .eq("sensor_type", "temperature");
+
+                if (sensorsError) throw sensorsError;
+
+                const sensorIds = (tempSensors ?? []).map((sensor) => sensor.sensor_id);
+
+                if (sensorIds.length > 0) {
+                  const { data: latestReading, error: readingsError } = await supabase
+                    .from("sensor_readings")
+                    .select("sensor_id, value, unit, timestamp, is_valid")
+                    .in("sensor_id", sensorIds)
+                    .eq("is_valid", true)
+                    .order("timestamp", { ascending: false })
+                    .limit(1)
+                    .maybeSingle();
+
+                  if (readingsError) throw readingsError;
+
+                  const numericTemp = Number(latestReading?.value);
+                  currentTemp = Number.isFinite(numericTemp) ? numericTemp : null;
+                  tempUnit = latestReading?.unit ?? tempSensors?.[0]?.unit ?? null;
+                }
               }
 
-              const { data: tempSensors, error: sensorsError } = await supabase
-                .from("sensors")
-                .select("sensor_id, sensor_type, unit")
-                .in("board_id", boardIds)
-                .eq("sensor_type", "temperature");
+              let avatarUrl = null;
 
-              if (sensorsError) throw sensorsError;
+              if (hive.avatar_type === "custom" && hive.avatar_storage_path) {
+                const { data: publicUrlData } = supabase.storage
+                  .from("hive-avatars")
+                  .getPublicUrl(hive.avatar_storage_path);
 
-              const sensorIds = (tempSensors ?? []).map((sensor) => sensor.sensor_id);
-
-              if (sensorIds.length === 0) {
-                return {
-                  ...hive,
-                  currentTemp: null,
-                  tempUnit: null,
-                };
+                avatarUrl = publicUrlData?.publicUrl ?? null;
               }
-
-              const { data: latestReading, error: readingsError } = await supabase
-                .from("sensor_readings")
-                .select("sensor_id, value, unit, timestamp, is_valid")
-                .in("sensor_id", sensorIds)
-                .eq("is_valid", true)
-                .order("timestamp", { ascending: false })
-                .limit(1)
-                .maybeSingle();
-
-              if (readingsError) throw readingsError;
-
-              const numericTemp = Number(latestReading?.value);
 
               return {
                 ...hive,
-                currentTemp: Number.isFinite(numericTemp) ? numericTemp : null,
-                tempUnit: latestReading?.unit ?? tempSensors?.[0]?.unit ?? null,
+                currentTemp,
+                tempUnit,
+                avatarUrl,
+                fallbackIcon: DEFAULT_ICONS[index % DEFAULT_ICONS.length],
+                resolvedBgColor:
+                  hive.avatar_bg_color ||
+                  DEFAULT_BG_COLORS[index % DEFAULT_BG_COLORS.length],
               };
             } catch (err) {
-              console.error(`Failed to load temp for hive ${hive.hive_id}:`, err);
+              console.error(`Failed to load hive ${hive.hive_id}:`, err);
+
+              let avatarUrl = null;
+
+              if (hive.avatar_type === "custom" && hive.avatar_storage_path) {
+                const { data: publicUrlData } = supabase.storage
+                  .from("hive-avatars")
+                  .getPublicUrl(hive.avatar_storage_path);
+
+                avatarUrl = publicUrlData?.publicUrl ?? null;
+              }
 
               return {
                 ...hive,
                 currentTemp: null,
                 tempUnit: null,
+                avatarUrl,
+                fallbackIcon: DEFAULT_ICONS[index % DEFAULT_ICONS.length],
+                resolvedBgColor:
+                  hive.avatar_bg_color ||
+                  DEFAULT_BG_COLORS[index % DEFAULT_BG_COLORS.length],
               };
             }
           })
@@ -129,6 +163,9 @@ export default function HiveOverview() {
           : `${Math.round(hive.currentTemp * 100) / 100}${hive.tempUnit ?? ""}`,
       status: hive.hive_status || "unknown",
       systemOnline: hive.hive_status?.toLowerCase() === "active",
+      avatarUrl: hive.avatarUrl,
+      fallbackIcon: hive.fallbackIcon,
+      avatarBgColor: hive.resolvedBgColor,
     }));
   }, [hives]);
 

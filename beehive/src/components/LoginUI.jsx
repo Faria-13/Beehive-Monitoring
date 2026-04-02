@@ -138,7 +138,7 @@ export default function LoginUI({
                   left: 0,
                   width: "100%",
                   display: "flex",
-                  justifyContent: "space-between",  // 👈 key change
+                  justifyContent: "space-between",
                   px: "6%",
                 }}
               >
