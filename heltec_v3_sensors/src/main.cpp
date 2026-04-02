@@ -18,7 +18,8 @@ static const int SDA_PIN = 39;
 static const int SCL_PIN = 40;
 static const uint8_t SCD4X_ADDR = 0x62;
 
-
+#include <Preferences.h>
+Preferences store;
 
 Adafruit_BMP085 bmp;
 SensirionI2cScd4x scd4x;
@@ -26,7 +27,11 @@ SensirionI2cScd4x scd4x;
 // Define the sleep time in microseconds
 #define uS_TO_S_FACTOR 1000000ULL  /* Conversion factor for micro seconds to seconds */
 #define TIME_TO_SLEEP  3  
-#define TIME_TO_SLEEP_IN_SEC  (TIME_TO_SLEEP * 60)       
+#define TIME_TO_SLEEP_IN_SEC  (TIME_TO_SLEEP * 60)     
+
+//RTC data is retained during deep sleep, so we can use it to store the session parameters and avoid rejoining after every wakeup
+RTC_DATA_ATTR uint8_t lwSession[RADIOLIB_LORAWAN_SESSION_BUF_SIZE];
+RTC_DATA_ATTR bool hasRtcSession = false;
 
 // -------------------- Heltec WiFi LoRa 32 V3 SX1262 --------------------
 static const int LORA_CS   = 8;
@@ -49,7 +54,7 @@ LoRaWANNode node(&radio, &US915, SUBBAND);
 // These are the values from your earlier code.
 // Change them here if you updated them in TTN/TTS.
 uint64_t joinEUI = 0x0000000000000000ULL;
-uint64_t devEUI  = 0x70B3D57ED0076032ULL;
+uint64_t devEUI  = 0x70B3D57ED0076ADEULL;
 
 uint8_t appKey[16] = {
   0xD0, 0xFC, 0xAA, 0x3C,
@@ -105,6 +110,88 @@ static void packPayload(
 
   payload[6] = bmpT & 0xFF;
   payload[7] = (bmpT >> 8) & 0xFF;
+}
+
+
+void saveNoncesToFlash() {
+  uint8_t nonceBuf[RADIOLIB_LORAWAN_NONCES_BUF_SIZE];
+  memcpy(nonceBuf, node.getBufferNonces(), RADIOLIB_LORAWAN_NONCES_BUF_SIZE);
+
+  store.begin("radiolib", false);
+  store.putBytes("nonces", nonceBuf, RADIOLIB_LORAWAN_NONCES_BUF_SIZE);
+  store.end();
+
+  Serial.println("Saved LoRaWAN nonces to flash.");
+}
+
+bool restoreNoncesFromFlash() {
+  store.begin("radiolib", true);
+
+  size_t len = store.getBytesLength("nonces");
+  if (len != RADIOLIB_LORAWAN_NONCES_BUF_SIZE) {
+    store.end();
+    Serial.println("No valid saved nonces in flash.");
+    return false;
+  }
+
+  uint8_t nonceBuf[RADIOLIB_LORAWAN_NONCES_BUF_SIZE];
+  store.getBytes("nonces", nonceBuf, RADIOLIB_LORAWAN_NONCES_BUF_SIZE);
+  store.end();
+
+  int16_t state = node.setBufferNonces(nonceBuf);
+  if (state == RADIOLIB_ERR_NONE) {
+    Serial.println("Restored LoRaWAN nonces from flash.");
+    return true;
+  }
+
+  Serial.print("Failed to restore nonces: ");
+  Serial.println(state);
+  return false;
+}
+
+bool restoreSessionFromRtc() {
+  if (!hasRtcSession) {
+    Serial.println("No RTC session saved.");
+    return false;
+  }
+
+  int16_t state = node.setBufferSession(lwSession);
+  if (state == RADIOLIB_ERR_NONE) {
+    Serial.println("Restored LoRaWAN session from RTC memory.");
+    return true;
+  }
+
+  Serial.print("Failed to restore RTC session: ");
+  Serial.println(state);
+  return false;
+}
+
+void saveSessionToRtc() {
+  memcpy(lwSession, node.getBufferSession(), RADIOLIB_LORAWAN_SESSION_BUF_SIZE);
+  hasRtcSession = true;
+  Serial.println("Saved LoRaWAN session to RTC memory.");
+}
+
+bool waitForScd41Data(uint32_t timeoutMs = 7000) {
+  uint32_t start = millis();
+  while (millis() - start < timeoutMs) {
+    bool dataReady = false;
+    uint16_t err = scd4x.getDataReadyStatus(dataReady);
+
+    if (err) {
+      printScdError("getDataReadyStatus", err);
+      return false;
+    }
+
+    if (dataReady) {
+      return true;
+    }
+
+    delay(500);
+  }
+
+  Serial.println("SCD41 timed out waiting for data.");
+  return false;
 }
 
 bool initSensors() {
@@ -168,8 +255,10 @@ bool initRadio() {
   return true;
 }
 
+
 bool joinNetwork() {
-  Serial.println("Starting OTAA join...");
+  Serial.println("Preparing LoRaWAN state...");
+  Serial.println("Starting OTAA/restore...");
 
   int16_t state = node.beginOTAA(joinEUI, devEUI, NULL, appKey);
   Serial.print("beginOTAA() = ");
@@ -179,23 +268,26 @@ bool joinNetwork() {
     return false;
   }
 
-  for (int attempt = 1; attempt <= 10; attempt++) {
-    Serial.print("activateOTAA attempt ");
-    Serial.println(attempt);
+  restoreNoncesFromFlash();
+  restoreSessionFromRtc();
 
-    state = node.activateOTAA();
-    Serial.print("activateOTAA() = ");
-    Serial.println(state);
+  state = node.activateOTAA();
+  Serial.print("activateOTAA() = ");
+  Serial.println(state);
 
-    if (state == RADIOLIB_ERR_NONE) {
-      Serial.println("Join successful.");
-      return true;
-    }
-
-    delay(5000);
+  if (state == RADIOLIB_LORAWAN_SESSION_RESTORED) {
+    Serial.println("LoRaWAN session restored.");
+    return true;
   }
 
-  Serial.println("Join failed.");
+  if (state == RADIOLIB_LORAWAN_NEW_SESSION || state == RADIOLIB_ERR_NONE) {
+    Serial.println("New LoRaWAN join successful.");
+    saveNoncesToFlash();
+    saveSessionToRtc();
+    return true;
+  }
+
+  Serial.println("Join/restore failed.");
   return false;
 }
 
@@ -225,15 +317,23 @@ bool readAndSend() {
   bool dataReady = false;
   uint16_t err = scd4x.getDataReadyStatus(dataReady);
 
+
+
+  // if (!dataReady) {
+  //   Serial.println("SCD41 data not ready yet.");
+    
+  //   return false;
+  // }
+
+  if (!waitForScd41Data()) {
+  return false;
+  }
+
   if (err) {
     printScdError("getDataReadyStatus", err);
     return false;
   }
 
-  if (!dataReady) {
-    Serial.println("SCD41 data not ready yet.");
-    return false;
-  }
 
   uint16_t co2 = 0;
   float scdTemp = 0.0f;
@@ -263,12 +363,16 @@ bool readAndSend() {
   }
 
   Serial.println("Uplink sent.");
+
+  // Save active session so deep sleep wake can restore it
+  saveSessionToRtc();
   return true;
 }
 
 void setup() {
   Serial.begin(115200);
   delay(1500);
+
 
   Serial.println();
   Serial.println("Booting Heltec V3 sensor node...");
