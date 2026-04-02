@@ -28,13 +28,6 @@ const LEVEL_META = {
     label: "INFO",
     icon: "ℹ",
   },
-  offline: {
-    color: "#9E9E9E",
-    bg: "rgba(158,158,158,0.10)",
-    border: "rgba(158,158,158,0.35)",
-    label: "OFFLINE",
-    icon: "📡",
-  },
 };
 
 function fmtTime(ts) {
@@ -150,55 +143,10 @@ function AlertRow({ alert, onAcknowledge, onResolve }) {
   );
 }
 
-// ─── Offline row ─────────────────────────────────────────────────────────────
-
-function OfflineRow({ notification }) {
-  const meta = LEVEL_META.offline;
-  const isPending = notification.delivery_status === "pending";
-
-  return (
-    <div
-      style={{
-        ...styles.alertRow,
-        background: meta.bg,
-        border: `1px solid ${meta.border}`,
-        borderLeft: `4px solid ${meta.color}`,
-        opacity: isPending ? 1 : 0.55,
-      }}
-    >
-      <div style={styles.alertLevel}>
-        <span style={{ color: meta.color, fontSize: 20 }}>{meta.icon}</span>
-        <span style={{ ...styles.levelBadge, color: meta.color, borderColor: meta.border }}>
-          {meta.label}
-        </span>
-      </div>
-
-      <div style={styles.alertBody}>
-        <div style={styles.alertMessage}>
-          Sensor {notification.sensor_id} — no data received
-        </div>
-        <div style={styles.alertMeta}>
-          <span>🐝 Hive {notification.hive_id}</span>
-          <span>🕐 Last seen: {fmtTime(notification.last_reading_timestamp)}</span>
-          <span
-            style={{
-              color: isPending ? "#FE9805" : "#66BB6A",
-              fontWeight: 600,
-            }}
-          >
-            {isPending ? "⏳ Pending" : "✅ Delivered"}
-          </span>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 // ─── Main Page ───────────────────────────────────────────────────────────────
 
 export default function AlertsPage() {
   const [alerts, setAlerts] = useState([]);
-  const [offline, setOffline] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("all");
   const [toasts, setToasts] = useState([]);
@@ -216,29 +164,14 @@ export default function AlertsPage() {
     setLoading(false);
   }, []);
 
-  // ── fetch offline notifications ──
-  const fetchOffline = useCallback(async () => {
-    const { data, error } = await supabase
-      .from("notifications")
-      .select("*")
-      .eq("hive_id", HIVE_ID)
-      .eq("notification_type", "no_data")
-      .order("created_at", { ascending: false })
-      .limit(50);
-
-    if (!error && data) setOffline(data);
-  }, []);
-
   useEffect(() => {
     fetchAlerts();
-    fetchOffline();
-  }, [fetchAlerts, fetchOffline]);
+  }, [fetchAlerts]);
 
   // ── realtime ──
   useEffect(() => {
     const channel = supabase
       .channel("alerts-page-live")
-      // alerts table
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "alerts", filter: `hive_id=eq.${HIVE_ID}` },
@@ -257,68 +190,97 @@ export default function AlertsPage() {
           }
         }
       )
-      // notifications table (sensor offline)
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "notifications", filter: `hive_id=eq.${HIVE_ID}` },
-        (payload) => {
-          const n = payload.new;
-          if (n.notification_type !== "no_data") return;
-          setOffline((prev) => [n, ...prev]);
-          const toastId = Date.now();
-          setToasts((prev) => [
-            ...prev,
-            {
-              id: toastId,
-              hive_id: n.hive_id,
-              alert_level: "warning",
-              message: `Sensor ${n.sensor_id} offline — last seen ${fmtTime(n.last_reading_timestamp)}`,
-            },
-          ]);
-          setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== toastId)), 6000);
-        }
-      )
       .subscribe();
 
     return () => supabase.removeChannel(channel);
   }, []);
 
-  // ── actions ──
+  // ── actions (optimistic updates) ──
   const acknowledge = async (alertId) => {
-    await supabase
+    const now = new Date().toISOString();
+
+    // Update UI immediately
+    setAlerts((prev) =>
+      prev.map((a) =>
+        a.alert_id === alertId
+          ? { ...a, acknowledged: true, acknowledged_at: now }
+          : a
+      )
+    );
+
+    // Try Supabase in background
+    const { error } = await supabase
       .from("alerts")
-      .update({ acknowledged: true, acknowledged_at: new Date().toISOString() })
+      .update({ acknowledged: true, acknowledged_at: now })
       .eq("alert_id", alertId);
+
+    if (error) {
+      console.error("Acknowledge failed:", error);
+      // Revert on failure
+      setAlerts((prev) =>
+        prev.map((a) =>
+          a.alert_id === alertId
+            ? { ...a, acknowledged: false, acknowledged_at: null }
+            : a
+        )
+      );
+    }
   };
 
   const resolve = async (alertId) => {
-    await supabase
+    const now = new Date().toISOString();
+
+    // Update UI immediately
+    setAlerts((prev) =>
+      prev.map((a) =>
+        a.alert_id === alertId
+          ? {
+              ...a,
+              resolved: true,
+              resolved_at: now,
+              acknowledged: true,
+              acknowledged_at: a.acknowledged_at ?? now,
+            }
+          : a
+      )
+    );
+
+    // Try Supabase in background
+    const { error } = await supabase
       .from("alerts")
       .update({
         resolved: true,
-        resolved_at: new Date().toISOString(),
+        resolved_at: now,
         acknowledged: true,
-        acknowledged_at: new Date().toISOString(),
+        acknowledged_at: now,
       })
       .eq("alert_id", alertId);
+
+    if (error) {
+      console.error("Resolve failed:", error);
+      // Revert on failure
+      setAlerts((prev) =>
+        prev.map((a) =>
+          a.alert_id === alertId
+            ? { ...a, resolved: false, resolved_at: null }
+            : a
+        )
+      );
+    }
   };
 
   // ── filter ──
   const filtered = (() => {
-    if (filter === "offline") return [];
     if (filter === "unresolved") return alerts.filter((a) => !a.resolved);
     if (filter === "all") return alerts;
     return alerts.filter((a) => a.alert_level === filter);
   })();
-
-  const showOffline = filter === "all" || filter === "offline";
 
   // ── counts ──
   const counts = {
     critical: alerts.filter((a) => a.alert_level === "critical" && !a.resolved).length,
     warning: alerts.filter((a) => a.alert_level === "warning" && !a.resolved).length,
     info: alerts.filter((a) => a.alert_level === "info" && !a.resolved).length,
-    offline: offline.filter((n) => n.delivery_status === "pending").length,
   };
 
   return (
@@ -355,7 +317,7 @@ export default function AlertsPage() {
 
         {/* Filter tabs */}
         <div style={styles.filterRow}>
-          {["all", "unresolved", "critical", "warning", "info", "offline"].map((f) => (
+          {["all", "unresolved", "critical", "warning", "info"].map((f) => (
             <button
               key={f}
               style={{ ...styles.filterBtn, ...(filter === f ? styles.filterBtnActive : {}) }}
@@ -374,32 +336,19 @@ export default function AlertsPage() {
         <div style={styles.list}>
           {loading ? (
             <div style={styles.empty}>Loading alerts…</div>
+          ) : filtered.length === 0 ? (
+            <div style={styles.empty}>
+              {filter === "unresolved" ? "✅ All clear — no unresolved alerts!" : "No alerts found."}
+            </div>
           ) : (
-            <>
-              {/* Offline sensor rows */}
-              {showOffline &&
-                offline.map((n, i) => <OfflineRow key={i} notification={n} />)}
-
-              {/* Regular alerts */}
-              {filtered.length === 0 && !showOffline ? (
-                <div style={styles.empty}>
-                  {filter === "unresolved" ? "✅ All clear — no unresolved alerts!" : "No alerts found."}
-                </div>
-              ) : (
-                filtered.map((alert) => (
-                  <AlertRow
-                    key={alert.alert_id}
-                    alert={alert}
-                    onAcknowledge={() => acknowledge(alert.alert_id)}
-                    onResolve={() => resolve(alert.alert_id)}
-                  />
-                ))
-              )}
-
-              {showOffline && offline.length === 0 && filtered.length === 0 && (
-                <div style={styles.empty}>✅ All clear — no alerts!</div>
-              )}
-            </>
+            filtered.map((alert) => (
+              <AlertRow
+                key={alert.alert_id}
+                alert={alert}
+                onAcknowledge={() => acknowledge(alert.alert_id)}
+                onResolve={() => resolve(alert.alert_id)}
+              />
+            ))
           )}
         </div>
       </div>
