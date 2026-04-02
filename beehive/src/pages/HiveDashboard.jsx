@@ -34,7 +34,7 @@ export default function HiveDashboard() {
         setHive(hiveData);
 
         const { data: boards, error: boardsError } = await supabase
-          .from("iot_board")
+          .from("iot_boards")
           .select("board_id")
           .eq("hive_id", hiveId);
 
@@ -45,6 +45,16 @@ export default function HiveDashboard() {
         if (boardIds.length === 0) {
           setSensors([]);
           setSelectedSensorId(null);
+
+          const safeSensors = sensorData ?? [];
+          console.log("HiveDashboard hiveId:", hiveId);
+          console.log("HiveDashboard hive:", hiveData);
+          console.log("HiveDashboard boards:", boards);
+          console.log("HiveDashboard boardIds:", boardIds);
+          console.log("HiveDashboard safeSensors:", safeSensors);
+
+          setSensors(safeSensors);
+          setSelectedSensorId(safeSensors[0]?.sensor_id ?? null);
           return;
         }
 

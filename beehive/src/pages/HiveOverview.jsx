@@ -38,7 +38,77 @@ export default function HiveOverview() {
 
         if (hiveError) throw hiveError;
 
-        setHives(hiveData ?? []);
+        const safeHives = hiveData ?? [];
+
+        const enrichedHives = await Promise.all(
+          safeHives.map(async (hive) => {
+            try {
+              const { data: boards, error: boardsError } = await supabase
+                .from("iot_boards")
+                .select("board_id")
+                .eq("hive_id", hive.hive_id);
+
+              if (boardsError) throw boardsError;
+
+              const boardIds = (boards ?? []).map((board) => board.board_id);
+
+              if (boardIds.length === 0) {
+                return {
+                  ...hive,
+                  currentTemp: null,
+                  tempUnit: null,
+                };
+              }
+
+              const { data: tempSensors, error: sensorsError } = await supabase
+                .from("sensors")
+                .select("sensor_id, sensor_type, unit")
+                .in("board_id", boardIds)
+                .eq("sensor_type", "temperature");
+
+              if (sensorsError) throw sensorsError;
+
+              const sensorIds = (tempSensors ?? []).map((sensor) => sensor.sensor_id);
+
+              if (sensorIds.length === 0) {
+                return {
+                  ...hive,
+                  currentTemp: null,
+                  tempUnit: null,
+                };
+              }
+
+              const { data: latestReading, error: readingsError } = await supabase
+                .from("sensor_readings")
+                .select("sensor_id, value, unit, timestamp, is_valid")
+                .in("sensor_id", sensorIds)
+                .eq("is_valid", true)
+                .order("timestamp", { ascending: false })
+                .limit(1)
+                .maybeSingle();
+
+              if (readingsError) throw readingsError;
+
+              const numericTemp = Number(latestReading?.value);
+
+              return {
+                ...hive,
+                currentTemp: Number.isFinite(numericTemp) ? numericTemp : null,
+                tempUnit: latestReading?.unit ?? tempSensors?.[0]?.unit ?? null,
+              };
+            } catch (err) {
+              console.error(`Failed to load temp for hive ${hive.hive_id}:`, err);
+
+              return {
+                ...hive,
+                currentTemp: null,
+                tempUnit: null,
+              };
+            }
+          })
+        );
+
+        setHives(enrichedHives);
       } catch (e) {
         setError(e.message || "Failed to load hives");
       } finally {
@@ -53,7 +123,10 @@ export default function HiveOverview() {
     return hives.map((hive) => ({
       hive_id: hive.hive_id,
       name: hive.hive_code || `Hive ${hive.hive_id}`,
-      currentTemp: "--",
+      currentTemp:
+        hive.currentTemp == null
+          ? "--"
+          : `${Math.round(hive.currentTemp * 100) / 100}${hive.tempUnit ?? ""}`,
       status: hive.hive_status || "unknown",
       systemOnline: hive.hive_status?.toLowerCase() === "active",
     }));
@@ -65,10 +138,21 @@ export default function HiveOverview() {
       (hive) => hive.hive_status?.toLowerCase() === "active"
     ).length;
 
+    const validTemps = hives
+      .map((hive) => Number(hive.currentTemp))
+      .filter((temp) => Number.isFinite(temp));
+
+    const avgTemp =
+      validTemps.length === 0
+        ? "--"
+        : Math.round(
+            (validTemps.reduce((sum, temp) => sum + temp, 0) / validTemps.length) * 100
+          ) / 100;
+
     return {
       totalHives,
       activeAlerts: 0,
-      avgTemp: "--",
+      avgTemp: avgTemp === "--" ? "--" : `${avgTemp}°C`,
       systemsOnline,
     };
   }, [hives]);
