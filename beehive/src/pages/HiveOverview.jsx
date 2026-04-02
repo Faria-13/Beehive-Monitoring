@@ -1,13 +1,9 @@
-//Page that lists all hives for the current user.
-
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../createClient";
 import { useAuth } from "../context/AuthContext";
-import { Link } from "react-router-dom";
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
-import Stack from "@mui/material/Stack";
-import Button from "@mui/material/Button";
+import HiveOverviewUI from "../components/HiveOverviewUI";
 
 export default function HiveOverview() {
   const { user } = useAuth();
@@ -25,7 +21,6 @@ export default function HiveOverview() {
         setLoading(true);
         setError(null);
 
-        // 1. Get app user (match by email)
         const { data: userData, error: userError } = await supabase
           .from("users")
           .select("*")
@@ -36,7 +31,6 @@ export default function HiveOverview() {
 
         setAppUser(userData);
 
-        // 2. Get hives for this user
         const { data: hiveData, error: hiveError } = await supabase
           .from("beehives")
           .select("*")
@@ -55,6 +49,30 @@ export default function HiveOverview() {
     load();
   }, [user]);
 
+  const uiHives = useMemo(() => {
+    return hives.map((hive) => ({
+      hive_id: hive.hive_id,
+      name: hive.hive_code || `Hive ${hive.hive_id}`,
+      currentTemp: "--",
+      status: hive.hive_status || "unknown",
+      systemOnline: hive.hive_status?.toLowerCase() === "active",
+    }));
+  }, [hives]);
+
+  const stats = useMemo(() => {
+    const totalHives = hives.length;
+    const systemsOnline = hives.filter(
+      (hive) => hive.hive_status?.toLowerCase() === "active"
+    ).length;
+
+    return {
+      totalHives,
+      activeAlerts: 0,
+      avgTemp: "--",
+      systemsOnline,
+    };
+  }, [hives]);
+
   if (loading) {
     return <Box sx={{ p: 3 }}>Loading...</Box>;
   }
@@ -68,31 +86,15 @@ export default function HiveOverview() {
   }
 
   return (
-    <Box sx={{ maxWidth: 800, mx: "auto", mt: 4 }}>
-      <Stack spacing={3}>
-        {/* Greeting */}
-        <Typography variant="h4">
-          Hello {appUser?.first_name || "User"}
-        </Typography>
-
-        {/* Hive list */}
-        <Stack spacing={2}>
-          {hives.length === 0 ? (
-            <Typography>No hives found.</Typography>
-          ) : (
-            hives.map((hive) => (
-              <Button
-                key={hive.hive_id}
-                component={Link}
-                to={`/hives/${hive.hive_id}`}
-                variant="outlined"
-              >
-                {hive.hive_code || `Hive ${hive.hive_id}`}
-              </Button>
-            ))
-          )}
-        </Stack>
-      </Stack>
-    </Box>
+    <HiveOverviewUI
+      userName={appUser?.first_name || "User"}
+      stats={stats}
+      hives={uiHives}
+      onSortClick={() => {}}
+      onFilterClick={() => {}}
+      onAlertsClick={() => {}}
+      onDatabaseClick={() => {}}
+      onSettingsClick={() => {}}
+    />
   );
 }

@@ -4,9 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
-import TextField from "@mui/material/TextField";
-import Button from "@mui/material/Button";
-import Stack from "@mui/material/Stack";
+import LoginUI from "../components/LoginUI";
 
 export default function Login() {
   const navigate = useNavigate();
@@ -14,17 +12,41 @@ export default function Login() {
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [activeTab, setActiveTab] = useState("login");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    if (!authLoading && user) {
-      navigate("/hives", { replace: true });
+    async function redirectIfLoggedIn() {
+      if (!authLoading && user) {
+        const { data: userData, error: userError } = await supabase
+          .from("users")
+          .select("user_type")
+          .eq("email", user.email)
+          .maybeSingle();
+
+        if (userError || !userData) {
+          setError("User record not found in database.");
+          return;
+        }
+
+        if (userData.user_type === "system_administrator") {
+          navigate("/admin", { replace: true });
+        } else {
+          navigate("/hives", { replace: true });
+        }
+      }
     }
+
+    redirectIfLoggedIn();
   }, [user, authLoading, navigate]);
 
-  const handleLogin = async (e) => {
-    e.preventDefault();
+  const handleLogin = async () => {
+    if (activeTab !== "login") {
+      setError("Sign up is not implemented yet.");
+      return;
+    }
+
     setLoading(true);
     setError(null);
 
@@ -39,7 +61,24 @@ export default function Login() {
       return;
     }
 
-    navigate("/hives", { replace: true });
+    const { data: userData, error: userError } = await supabase
+      .from("users")
+      .select("user_type")
+      .eq("email", email)
+      .maybeSingle();
+
+    if (userError || !userData) {
+      setError("User record not found in database.");
+      setLoading(false);
+      return;
+    }
+
+    if (userData.user_type === "system_administrator") {
+      navigate("/admin", { replace: true });
+    } else {
+      navigate("/hives", { replace: true });
+    }
+
     setLoading(false);
   };
 
@@ -48,62 +87,36 @@ export default function Login() {
   }
 
   return (
-    <Box
-      sx={{
-        minHeight: "100vh",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-      }}
-    >
-      <Box sx={{ width: 320 }}>
-        <Stack spacing={2}>
-          <Typography variant="h4" textAlign="center">
-            Beehive Monitoring
+    <>
+      <LoginUI
+        activeTab={activeTab}
+        emailValue={email}
+        passwordValue={password}
+        onTabChange={setActiveTab}
+        onEmailChange={setEmail}
+        onPasswordChange={setPassword}
+        onSubmit={handleLogin}
+        appTitle={"Beehive\nMonitoring"}
+        appSubtitle="by DUBAI"
+      />
+
+      {error && (
+        <Box sx={{ position: "fixed", bottom: 24, left: 24, zIndex: 2000 }}>
+          <Typography
+            color="error"
+            variant="body2"
+            sx={{
+              bgcolor: "white",
+              px: 2,
+              py: 1,
+              borderRadius: 1,
+              boxShadow: 2,
+            }}
+          >
+            {error}
           </Typography>
-
-          <Typography variant="subtitle1" textAlign="center">
-            by DUBAI
-          </Typography>
-
-          <form onSubmit={handleLogin}>
-            <Stack spacing={2}>
-              <TextField
-                label="Email"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                fullWidth
-              />
-
-              <TextField
-                label="Password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                fullWidth
-              />
-
-              {error && (
-                <Typography color="error" variant="body2">
-                  {error}
-                </Typography>
-              )}
-
-              <Button
-                type="submit"
-                variant="contained"
-                disabled={loading}
-                fullWidth
-              >
-                {loading ? "Logging in..." : "Log In"}
-              </Button>
-            </Stack>
-          </form>
-        </Stack>
-      </Box>
-    </Box>
+        </Box>
+      )}
+    </>
   );
 }
