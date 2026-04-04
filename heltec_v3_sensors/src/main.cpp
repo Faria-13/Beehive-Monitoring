@@ -273,24 +273,64 @@ bool joinNetwork() {
     return false;
   }
 
-  node.setADR(true);
+  node.setADR(false);
+  node.setDatarate(0);
   node.setTxPower(20);
-  restoreNoncesFromFlash();
-  restoreSessionFromRtc();
+
+  bool hadNonces = restoreNoncesFromFlash();
+  bool hadRtc = restoreSessionFromRtc();
 
   state = node.activateOTAA();
   Serial.print("activateOTAA() = ");
-  
-  
   Serial.println(state);
 
-  if (state == RADIOLIB_LORAWAN_SESSION_RESTORED) {
-    Serial.println("LoRaWAN session restored.");
+  bool joined =
+    (state == RADIOLIB_LORAWAN_SESSION_RESTORED) ||
+    (state == RADIOLIB_LORAWAN_NEW_SESSION) ||
+    (state == RADIOLIB_ERR_NONE);
+
+  bool activated = node.isActivated();
+
+  Serial.print("node.isActivated() = ");
+  Serial.println(activated ? "true" : "false");
+
+  if (joined && activated) {
+    if (state == RADIOLIB_LORAWAN_SESSION_RESTORED) {
+      Serial.println("LoRaWAN session restored and verified.");
+    } else {
+      Serial.println("New LoRaWAN join successful and verified.");
+      saveNoncesToFlash();
+      saveSessionToRtc();
+    }
     return true;
   }
 
-  if (state == RADIOLIB_LORAWAN_NEW_SESSION || state == RADIOLIB_ERR_NONE) {
-    Serial.println("New LoRaWAN join successful.");
+  Serial.println("Join result and activation state do not match.");
+  Serial.println("Clearing cached RTC session and retrying fresh OTAA...");
+
+  // throw away restored session if it looks invalid
+  hasRtcSession = false;
+
+  // optional: clear the in-memory RadioLib session too
+  node.clearSession();
+
+  // do one clean retry
+  state = node.activateOTAA();
+  Serial.print("activateOTAA() retry = ");
+  Serial.println(state);
+
+  joined =
+    (state == RADIOLIB_LORAWAN_SESSION_RESTORED) ||
+    (state == RADIOLIB_LORAWAN_NEW_SESSION) ||
+    (state == RADIOLIB_ERR_NONE);
+
+  activated = node.isActivated();
+
+  Serial.print("node.isActivated() after retry = ");
+  Serial.println(activated ? "true" : "false");
+
+  if (joined && activated) {
+    Serial.println("LoRaWAN join verified after retry.");
     saveNoncesToFlash();
     saveSessionToRtc();
     return true;
@@ -323,26 +363,28 @@ static float readBatteryPercent() {
 }
 
 bool readAndSend() {
+  Serial.print("Before uplink, node.isActivated() = ");
+  Serial.println(node.isActivated() ? "true" : "false");
+
+  if (!node.isActivated()) {
+    Serial.println("Node is not activated before uplink. Rejoining...");
+    if (!joinNetwork()) {
+      Serial.println("Rejoin failed.");
+      return false;
+    }
+  }
+
   bool dataReady = false;
   uint16_t err = scd4x.getDataReadyStatus(dataReady);
 
-
-
-  // if (!dataReady) {
-  //   Serial.println("SCD41 data not ready yet.");
-    
-  //   return false;
-  // }
-
   if (!waitForScd41Data()) {
-  return false;
+    return false;
   }
 
   if (err) {
     printScdError("getDataReadyStatus", err);
     return false;
   }
-
 
   uint16_t co2 = 0;
   float scdTemp = 0.0f;
@@ -362,18 +404,25 @@ bool readAndSend() {
   packPayload(payload, co2, batteryPercent, humidity, bmpTemp, pressure);
 
   Serial.println("Sending uplink...");
-  int16_t state = node.sendReceive(payload, sizeof(payload), FPORT);
+  int16_t state = node.sendReceive(payload, sizeof(payload), FPORT, false);
   Serial.print("sendReceive() = ");
   Serial.println(state);
 
+  Serial.print("After uplink, node.isActivated() = ");
+  Serial.println(node.isActivated() ? "true" : "false");
+
   if (state < 0) {
     Serial.println("Uplink failed.");
+
+    if (!node.isActivated()) {
+      Serial.println("Session no longer active. Clearing RTC session cache.");
+      hasRtcSession = false;
+    }
+
     return false;
   }
 
   Serial.println("Uplink sent.");
-
-  // Save active session so deep sleep wake can restore it
   saveSessionToRtc();
   return true;
 }
@@ -417,7 +466,7 @@ void setup() {
 void loop() {
   readAndSend();
 
-  // delay(60000);
+  delay(60000);
 
   // 3. Prepare for Deep Sleep
   Serial.println("Entering deep sleep for 10 minutes...");
@@ -427,8 +476,8 @@ void loop() {
   digitalWrite(ADC_CTRL_PIN, LOW); 
 
   // Set the timer and go to sleep
-  esp_sleep_enable_timer_wakeup(TIME_TO_SLEEP_IN_SEC * uS_TO_S_FACTOR);
-  esp_deep_sleep_start();
+  // esp_sleep_enable_timer_wakeup(TIME_TO_SLEEP_IN_SEC * uS_TO_S_FACTOR);
+  // esp_deep_sleep_start();
 
   // deep sleep implementation 
 }
