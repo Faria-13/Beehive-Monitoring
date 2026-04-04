@@ -32,7 +32,7 @@ Preferences store;
 Adafruit_BMP085 bmp;
 SensirionI2cScd4x scd4x;
 
-// RTC data survives deep sleep, but not full power loss/reset
+// RTC survives true deep sleep, but not full power loss / cold boot
 RTC_DATA_ATTR uint8_t lwSession[RADIOLIB_LORAWAN_SESSION_BUF_SIZE];
 RTC_DATA_ATTR bool hasRtcSession = false;
 
@@ -49,9 +49,9 @@ SX1262 radio = new Module(LORA_CS, LORA_DIO1, LORA_RST, LORA_BUSY);
 
 // -------------------- LoRaWAN --------------------
 static const uint8_t SUBBAND = 2;   // US915 sub-band 2
-static const uint8_t FPORT = 1;
+static const uint8_t FPORT   = 1;
 
-LoRaWANNode node(&radio, &US915, SUBBAND);
+LoRaWANNode* node = nullptr;
 
 // -------------------- OTAA Credentials --------------------
 uint64_t joinEUI = 0x0000000000000000ULL;
@@ -65,7 +65,7 @@ uint8_t appKey[16] = {
 };
 
 // -------------------- Helpers --------------------
-static void printScdError(const char *where, uint16_t error) {
+static void printScdError(const char* where, uint16_t error) {
   if (!error) return;
 
   char msg[256];
@@ -137,7 +137,7 @@ void printRadioLibState(const char* label, int16_t state) {
 }
 
 static void packPayload(
-  uint8_t *payload,
+  uint8_t* payload,
   uint16_t co2,
   float batteryPercent,
   float rh,
@@ -145,9 +145,9 @@ static void packPayload(
   float bmpPressure
 ) {
   int16_t battPct = (int16_t)lroundf(batteryPercent * 100.0f);
-  uint16_t hum = (uint16_t)lroundf(rh * 100.0f);
-  int16_t bmpT = (int16_t)lroundf(bmpTemp * 100.0f);
-  int16_t bmpP = (int16_t)lroundf(bmpPressure * 100.0f);
+  uint16_t hum    = (uint16_t)lroundf(rh * 100.0f);
+  int16_t bmpT    = (int16_t)lroundf(bmpTemp * 100.0f);
+  int16_t bmpP    = (int16_t)lroundf(bmpPressure * 100.0f);
 
   payload[0] = co2 & 0xFF;
   payload[1] = (co2 >> 8) & 0xFF;
@@ -165,10 +165,23 @@ static void packPayload(
   payload[9] = (bmpP >> 8) & 0xFF;
 }
 
+// -------------------- LoRaWAN Object --------------------
+void rebuildLoRaWANNode() {
+  if (node != nullptr) {
+    delete node;
+    node = nullptr;
+  }
+
+  node = new LoRaWANNode(&radio, &US915, SUBBAND);
+  Serial.println("LoRaWAN node rebuilt.");
+}
+
 // -------------------- Nonce / Session Persistence --------------------
 void saveNoncesToFlash() {
+  if (!node) return;
+
   uint8_t nonceBuf[RADIOLIB_LORAWAN_NONCES_BUF_SIZE];
-  memcpy(nonceBuf, node.getBufferNonces(), RADIOLIB_LORAWAN_NONCES_BUF_SIZE);
+  memcpy(nonceBuf, node->getBufferNonces(), RADIOLIB_LORAWAN_NONCES_BUF_SIZE);
 
   store.begin("radiolib", false);
   store.putBytes("nonces", nonceBuf, RADIOLIB_LORAWAN_NONCES_BUF_SIZE);
@@ -178,6 +191,8 @@ void saveNoncesToFlash() {
 }
 
 bool restoreNoncesFromFlash() {
+  if (!node) return false;
+
   store.begin("radiolib", true);
 
   size_t len = store.getBytesLength("nonces");
@@ -191,7 +206,7 @@ bool restoreNoncesFromFlash() {
   store.getBytes("nonces", nonceBuf, RADIOLIB_LORAWAN_NONCES_BUF_SIZE);
   store.end();
 
-  int16_t state = node.setBufferNonces(nonceBuf);
+  int16_t state = node->setBufferNonces(nonceBuf);
   if (state == RADIOLIB_ERR_NONE) {
     Serial.println("Restored LoRaWAN nonces from flash.");
     return true;
@@ -203,18 +218,22 @@ bool restoreNoncesFromFlash() {
 }
 
 void saveSessionToRtc() {
-  memcpy(lwSession, node.getBufferSession(), RADIOLIB_LORAWAN_SESSION_BUF_SIZE);
+  if (!node) return;
+
+  memcpy(lwSession, node->getBufferSession(), RADIOLIB_LORAWAN_SESSION_BUF_SIZE);
   hasRtcSession = true;
   Serial.println("Saved LoRaWAN session to RTC memory.");
 }
 
 bool restoreSessionFromRtc() {
+  if (!node) return false;
+
   if (!hasRtcSession) {
     Serial.println("No RTC session saved.");
     return false;
   }
 
-  int16_t state = node.setBufferSession(lwSession);
+  int16_t state = node->setBufferSession(lwSession);
   if (state == RADIOLIB_ERR_NONE) {
     Serial.println("Restored LoRaWAN session from RTC memory.");
     return true;
@@ -225,47 +244,10 @@ bool restoreSessionFromRtc() {
   return false;
 }
 
-void saveSessionToFlash() {
-  uint8_t sessionBuf[RADIOLIB_LORAWAN_SESSION_BUF_SIZE];
-  memcpy(sessionBuf, node.getBufferSession(), RADIOLIB_LORAWAN_SESSION_BUF_SIZE);
-
-  store.begin("radiolib", false);
-  store.putBytes("session", sessionBuf, RADIOLIB_LORAWAN_SESSION_BUF_SIZE);
-  store.end();
-
-  Serial.println("Saved LoRaWAN session to flash.");
-}
-
-bool restoreSessionFromFlash() {
-  store.begin("radiolib", true);
-
-  size_t len = store.getBytesLength("session");
-  if (len != RADIOLIB_LORAWAN_SESSION_BUF_SIZE) {
-    store.end();
-    Serial.println("No valid saved session in flash.");
-    return false;
-  }
-
-  uint8_t sessionBuf[RADIOLIB_LORAWAN_SESSION_BUF_SIZE];
-  store.getBytes("session", sessionBuf, RADIOLIB_LORAWAN_SESSION_BUF_SIZE);
-  store.end();
-
-  int16_t state = node.setBufferSession(sessionBuf);
-  if (state == RADIOLIB_ERR_NONE) {
-    Serial.println("Restored LoRaWAN session from flash.");
-    return true;
-  }
-
-  Serial.print("Failed to restore session from flash: ");
-  Serial.println(state);
-  return false;
-}
-
-void clearSavedSessionFlash() {
-  store.begin("radiolib", false);
-  store.remove("session");
-  store.end();
-  Serial.println("Cleared saved flash session.");
+void clearRtcSession() {
+  hasRtcSession = false;
+  memset(lwSession, 0, sizeof(lwSession));
+  Serial.println("Cleared RTC session.");
 }
 
 // -------------------- Sensor Functions --------------------
@@ -355,10 +337,15 @@ bool initRadio() {
 
 // -------------------- LoRaWAN Join --------------------
 bool joinNetwork() {
+  if (!node) {
+    Serial.println("LoRaWAN node is null.");
+    return false;
+  }
+
   Serial.println("Preparing LoRaWAN state...");
   Serial.println("Starting OTAA/restore...");
 
-  int16_t state = node.beginOTAA(joinEUI, devEUI, NULL, appKey);
+  int16_t state = node->beginOTAA(joinEUI, devEUI, NULL, appKey);
   Serial.print("beginOTAA() = ");
   Serial.println(state);
 
@@ -366,76 +353,45 @@ bool joinNetwork() {
     return false;
   }
 
-  node.setADR(false);
-  node.setDatarate(0);
-  node.setTxPower(20);
+  node->setADR(false);
+  node->setDatarate(0);
+  node->setTxPower(20);
 
   restoreNoncesFromFlash();
 
-  bool hadRtcSession = restoreSessionFromRtc();
-  if (!hadRtcSession) {
-    restoreSessionFromFlash();
+  esp_sleep_wakeup_cause_t wakeCause = esp_sleep_get_wakeup_cause();
+  bool restoredSession = false;
+
+  if (wakeCause == ESP_SLEEP_WAKEUP_TIMER) {
+    restoredSession = restoreSessionFromRtc();
+  } else {
+    Serial.println("Cold boot detected. Skipping session restore.");
+    clearRtcSession();
   }
 
-  state = node.activateOTAA();
+  state = node->activateOTAA();
   Serial.print("activateOTAA() = ");
   Serial.println(state);
 
-  bool joined =
-    (state == RADIOLIB_LORAWAN_SESSION_RESTORED) ||
-    (state == RADIOLIB_LORAWAN_NEW_SESSION) ||
-    (state == RADIOLIB_ERR_NONE);
-
-  bool activated = node.isActivated();
+  bool activated = node->isActivated();
 
   Serial.print("node.isActivated() = ");
   Serial.println(activated ? "true" : "false");
 
-  if (joined && activated) {
-    if (state == RADIOLIB_LORAWAN_SESSION_RESTORED) {
-      Serial.println("LoRaWAN session restored and verified.");
-      saveSessionToRtc();
-      saveSessionToFlash();
-    } else {
-      Serial.println("New LoRaWAN join successful and verified.");
-      saveNoncesToFlash();
-      saveSessionToRtc();
-      saveSessionToFlash();
-    }
-    return true;
+  if (!activated) {
+    Serial.println("Join failed.");
+    return false;
   }
 
-  Serial.println("Join result and activation state do not match.");
-  Serial.println("Clearing cached sessions and retrying fresh OTAA...");
-
-  hasRtcSession = false;
-  node.clearSession();
-  clearSavedSessionFlash();
-
-  state = node.activateOTAA();
-  Serial.print("activateOTAA() retry = ");
-  Serial.println(state);
-
-  joined =
-    (state == RADIOLIB_LORAWAN_SESSION_RESTORED) ||
-    (state == RADIOLIB_LORAWAN_NEW_SESSION) ||
-    (state == RADIOLIB_ERR_NONE);
-
-  activated = node.isActivated();
-
-  Serial.print("node.isActivated() after retry = ");
-  Serial.println(activated ? "true" : "false");
-
-  if (joined && activated) {
-    Serial.println("LoRaWAN join verified after retry.");
+  if (restoredSession || state == RADIOLIB_LORAWAN_SESSION_RESTORED) {
+    Serial.println("LoRaWAN session restored and verified.");
+  } else {
+    Serial.println("New LoRaWAN join successful.");
     saveNoncesToFlash();
-    saveSessionToRtc();
-    saveSessionToFlash();
-    return true;
   }
 
-  Serial.println("Join/restore failed.");
-  return false;
+  saveSessionToRtc();
+  return true;
 }
 
 // -------------------- Battery --------------------
@@ -460,33 +416,26 @@ static float readBatteryPercent() {
   Serial.println("%");
 
   digitalWrite(ADC_CTRL_PIN, LOW);
-
   return percent;
 }
 
 // -------------------- Read + Send --------------------
 bool readAndSend() {
-  Serial.println("---- readAndSend() ----");
-  Serial.print("Before uplink, node.isActivated() = ");
-  Serial.println(node.isActivated() ? "true" : "false");
-
-  if (!node.isActivated()) {
-    Serial.println("Node is not activated before uplink. Rejoining...");
-    if (!joinNetwork()) {
-      Serial.println("Rejoin failed.");
-      return false;
-    }
-  }
-
-  bool dataReady = false;
-  uint16_t err = scd4x.getDataReadyStatus(dataReady);
-
-  if (!waitForScd41Data()) {
+  if (!node) {
+    Serial.println("LoRaWAN node is null.");
     return false;
   }
 
-  if (err) {
-    printScdError("getDataReadyStatus", err);
+  Serial.println("---- readAndSend() ----");
+  Serial.print("Before uplink, node.isActivated() = ");
+  Serial.println(node->isActivated() ? "true" : "false");
+
+  if (!node->isActivated()) {
+    Serial.println("Node is not activated before uplink.");
+    return false;
+  }
+
+  if (!waitForScd41Data()) {
     return false;
   }
 
@@ -494,7 +443,7 @@ bool readAndSend() {
   float scdTemp = 0.0f;
   float humidity = 0.0f;
 
-  err = scd4x.readMeasurement(co2, scdTemp, humidity);
+  uint16_t err = scd4x.readMeasurement(co2, scdTemp, humidity);
   if (err) {
     printScdError("readMeasurement", err);
     return false;
@@ -507,49 +456,46 @@ bool readAndSend() {
   uint8_t payload[10];
   packPayload(payload, co2, batteryPercent, humidity, bmpTemp, pressure);
 
-  delay(200);
+  delay(300);
 
   Serial.println("Sending uplink...");
-  int16_t state = node.sendReceive(payload, sizeof(payload), FPORT, false);
+  int16_t state = node->sendReceive(payload, sizeof(payload), FPORT, false);
   printRadioLibState("sendReceive()", state);
 
   Serial.print("After uplink, node.isActivated() = ");
-  Serial.println(node.isActivated() ? "true" : "false");
+  Serial.println(node->isActivated() ? "true" : "false");
 
-#ifdef RADIOLIB_ERR_TX_TIMEOUT
-  if (state == RADIOLIB_ERR_TX_TIMEOUT) {
-    Serial.println("TX timeout detected. Reinitializing radio and retrying once...");
+  if (state < 0) {
+    Serial.println("Uplink failed. Reinitializing radio + rebuilding node + rejoining once...");
 
     if (!initRadio()) {
       Serial.println("Radio reinit failed.");
       return false;
     }
 
-    delay(200);
+    rebuildLoRaWANNode();
 
-    state = node.sendReceive(payload, sizeof(payload), FPORT, false);
+    if (!joinNetwork()) {
+      Serial.println("Rejoin after radio reinit failed.");
+      return false;
+    }
+
+    delay(300);
+
+    state = node->sendReceive(payload, sizeof(payload), FPORT, false);
     printRadioLibState("sendReceive() retry", state);
 
     Serial.print("After retry, node.isActivated() = ");
-    Serial.println(node.isActivated() ? "true" : "false");
-  }
-#endif
+    Serial.println(node->isActivated() ? "true" : "false");
 
-  if (state < 0) {
-    Serial.println("Uplink failed.");
-
-    if (!node.isActivated()) {
-      Serial.println("Session no longer active. Clearing cached session state.");
-      hasRtcSession = false;
-      clearSavedSessionFlash();
+    if (state < 0) {
+      Serial.println("Retry uplink failed.");
+      return false;
     }
-
-    return false;
   }
 
   Serial.println("Uplink sent.");
   saveSessionToRtc();
-  saveSessionToFlash();
   return true;
 }
 
@@ -571,6 +517,8 @@ void setup() {
 
   bool sensorsOk = initSensors();
   bool radioOk = initRadio();
+
+  rebuildLoRaWANNode();
 
   if (!sensorsOk) {
     Serial.println("Sensor init incomplete.");
