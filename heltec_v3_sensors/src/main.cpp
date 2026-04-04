@@ -1,13 +1,15 @@
-
 #include <Arduino.h>
 #include <Wire.h>
 #include <SPI.h>
 #include <math.h>
+#include <Preferences.h>
 
 #include <Adafruit_BMP085.h>
 #include <SensirionI2CScd4x.h>
 #include <SensirionCore.h>
 #include <RadioLib.h>
+
+// -------------------- Battery --------------------
 #define BATTERY_PIN 1
 #define ADC_CTRL_PIN 37
 #define BATTERY_LOW_VOLTAGE 3.1
@@ -18,18 +20,17 @@ static const int SDA_PIN = 39;
 static const int SCL_PIN = 40;
 static const uint8_t SCD4X_ADDR = 0x62;
 
-#include <Preferences.h>
-Preferences store;
+// -------------------- Deep Sleep --------------------
+#define uS_TO_S_FACTOR 1000000ULL
+#define TIME_TO_SLEEP 3
+#define TIME_TO_SLEEP_IN_SEC (TIME_TO_SLEEP * 60)
 
+// -------------------- Globals --------------------
+Preferences store;
 Adafruit_BMP085 bmp;
 SensirionI2cScd4x scd4x;
 
-// Define the sleep time in microseconds
-#define uS_TO_S_FACTOR 1000000ULL  /* Conversion factor for micro seconds to seconds */
-#define TIME_TO_SLEEP  3  
-#define TIME_TO_SLEEP_IN_SEC  (TIME_TO_SLEEP * 60)     
-
-//RTC data is retained during deep sleep, so we can use it to store the session parameters and avoid rejoining after every wakeup
+// RTC data survives deep sleep, but not full power loss/reset.
 RTC_DATA_ATTR uint8_t lwSession[RADIOLIB_LORAWAN_SESSION_BUF_SIZE];
 RTC_DATA_ATTR bool hasRtcSession = false;
 
@@ -44,15 +45,13 @@ static const int LORA_DIO1 = 14;
 
 SX1262 radio = new Module(LORA_CS, LORA_DIO1, LORA_RST, LORA_BUSY);
 
-// US915, sub-band 2
-static const uint8_t SUBBAND = 2;
+// -------------------- LoRaWAN --------------------
+static const uint8_t SUBBAND = 2;   // US915 sub-band 2
 static const uint8_t FPORT = 1;
 
 LoRaWANNode node(&radio, &US915, SUBBAND);
 
 // -------------------- OTAA Credentials --------------------
-// These are the values from your earlier code.
-// Change them here if you updated them in TTN/TTS.
 uint64_t joinEUI = 0x0000000000000000ULL;
 uint64_t devEUI  = 0x70B3D57ED0076ADEULL;
 
@@ -88,12 +87,29 @@ static uint16_t retrySensirion(Func f, int attempts, uint32_t delayMs) {
   return err;
 }
 
+void printWakeReason() {
+  esp_sleep_wakeup_cause_t wakeup_reason = esp_sleep_get_wakeup_cause();
+
+  Serial.print("Wake reason: ");
+  switch (wakeup_reason) {
+    case ESP_SLEEP_WAKEUP_TIMER:
+      Serial.println("TIMER");
+      break;
+    case ESP_SLEEP_WAKEUP_UNDEFINED:
+      Serial.println("UNDEFINED / COLD BOOT");
+      break;
+    default:
+      Serial.printf("OTHER (%d)\n", wakeup_reason);
+      break;
+  }
+}
+
 static void packPayload(
   uint8_t *payload,
   uint16_t co2,
   float batteryPercent,
   float rh,
-  float bmpTemp, 
+  float bmpTemp,
   float bmpPressure
 ) {
   int16_t battPct = (int16_t)lroundf(batteryPercent * 100.0f);
@@ -114,10 +130,10 @@ static void packPayload(
   payload[7] = (bmpT >> 8) & 0xFF;
 
   payload[8] = bmpP & 0xFF;
-  payload[9] = (bmpP >> 8) & 0xFF;  
+  payload[9] = (bmpP >> 8) & 0xFF;
 }
 
-
+// -------------------- Nonce / Session Persistence --------------------
 void saveNoncesToFlash() {
   uint8_t nonceBuf[RADIOLIB_LORAWAN_NONCES_BUF_SIZE];
   memcpy(nonceBuf, node.getBufferNonces(), RADIOLIB_LORAWAN_NONCES_BUF_SIZE);
@@ -154,6 +170,12 @@ bool restoreNoncesFromFlash() {
   return false;
 }
 
+void saveSessionToRtc() {
+  memcpy(lwSession, node.getBufferSession(), RADIOLIB_LORAWAN_SESSION_BUF_SIZE);
+  hasRtcSession = true;
+  Serial.println("Saved LoRaWAN session to RTC memory.");
+}
+
 bool restoreSessionFromRtc() {
   if (!hasRtcSession) {
     Serial.println("No RTC session saved.");
@@ -171,14 +193,53 @@ bool restoreSessionFromRtc() {
   return false;
 }
 
-void saveSessionToRtc() {
-  memcpy(lwSession, node.getBufferSession(), RADIOLIB_LORAWAN_SESSION_BUF_SIZE);
-  hasRtcSession = true;
-  Serial.println("Saved LoRaWAN session to RTC memory.");
+void saveSessionToFlash() {
+  uint8_t sessionBuf[RADIOLIB_LORAWAN_SESSION_BUF_SIZE];
+  memcpy(sessionBuf, node.getBufferSession(), RADIOLIB_LORAWAN_SESSION_BUF_SIZE);
+
+  store.begin("radiolib", false);
+  store.putBytes("session", sessionBuf, RADIOLIB_LORAWAN_SESSION_BUF_SIZE);
+  store.end();
+
+  Serial.println("Saved LoRaWAN session to flash.");
 }
 
+bool restoreSessionFromFlash() {
+  store.begin("radiolib", true);
+
+  size_t len = store.getBytesLength("session");
+  if (len != RADIOLIB_LORAWAN_SESSION_BUF_SIZE) {
+    store.end();
+    Serial.println("No valid saved session in flash.");
+    return false;
+  }
+
+  uint8_t sessionBuf[RADIOLIB_LORAWAN_SESSION_BUF_SIZE];
+  store.getBytes("session", sessionBuf, RADIOLIB_LORAWAN_SESSION_BUF_SIZE);
+  store.end();
+
+  int16_t state = node.setBufferSession(sessionBuf);
+  if (state == RADIOLIB_ERR_NONE) {
+    Serial.println("Restored LoRaWAN session from flash.");
+    return true;
+  }
+
+  Serial.print("Failed to restore session from flash: ");
+  Serial.println(state);
+  return false;
+}
+
+void clearSavedSessionFlash() {
+  store.begin("radiolib", false);
+  store.remove("session");
+  store.end();
+  Serial.println("Cleared saved flash session.");
+}
+
+// -------------------- Sensor Functions --------------------
 bool waitForScd41Data(uint32_t timeoutMs = 7000) {
   uint32_t start = millis();
+
   while (millis() - start < timeoutMs) {
     bool dataReady = false;
     uint16_t err = scd4x.getDataReadyStatus(dataReady);
@@ -222,6 +283,7 @@ bool initSensors() {
 
   retrySensirion([&]() { return scd4x.stopPeriodicMeasurement(); }, 3, 200);
   delay(300);
+
   retrySensirion([&]() { return scd4x.reinit(); }, 3, 300);
   delay(500);
 
@@ -236,6 +298,7 @@ bool initSensors() {
   return bmpOk && (err == 0);
 }
 
+// -------------------- Radio Init --------------------
 bool initRadio() {
   SPI.begin(LORA_SCK, LORA_MISO, LORA_MOSI, LORA_CS);
 
@@ -243,8 +306,6 @@ bool initRadio() {
   radio.setCurrentLimit(140.0);
   radio.setOutputPower(22);
 
-  // radio.setSpreadingFactor(12);
-  // radio.setBandwidth(125.0);
   Serial.print("radio.begin() = ");
   Serial.println(state);
 
@@ -252,7 +313,7 @@ bool initRadio() {
     return false;
   }
 
-  // Heltec V3 SX1262 board helpers
+  // Heltec V3 helpers
   radio.setDio2AsRfSwitch(true);
   radio.setTCXO(0.8);
 
@@ -260,7 +321,7 @@ bool initRadio() {
   return true;
 }
 
-
+// -------------------- LoRaWAN Join --------------------
 bool joinNetwork() {
   Serial.println("Preparing LoRaWAN state...");
   Serial.println("Starting OTAA/restore...");
@@ -277,8 +338,14 @@ bool joinNetwork() {
   node.setDatarate(0);
   node.setTxPower(20);
 
-  bool hadNonces = restoreNoncesFromFlash();
-  bool hadRtc = restoreSessionFromRtc();
+  restoreNoncesFromFlash();
+
+  bool hadRtcSession = restoreSessionFromRtc();
+  bool hadFlashSession = false;
+
+  if (!hadRtcSession) {
+    hadFlashSession = restoreSessionFromFlash();
+  }
 
   state = node.activateOTAA();
   Serial.print("activateOTAA() = ");
@@ -297,24 +364,24 @@ bool joinNetwork() {
   if (joined && activated) {
     if (state == RADIOLIB_LORAWAN_SESSION_RESTORED) {
       Serial.println("LoRaWAN session restored and verified.");
+      saveSessionToRtc();
+      saveSessionToFlash();
     } else {
       Serial.println("New LoRaWAN join successful and verified.");
       saveNoncesToFlash();
       saveSessionToRtc();
+      saveSessionToFlash();
     }
     return true;
   }
 
   Serial.println("Join result and activation state do not match.");
-  Serial.println("Clearing cached RTC session and retrying fresh OTAA...");
+  Serial.println("Clearing cached sessions and retrying fresh OTAA...");
 
-  // throw away restored session if it looks invalid
   hasRtcSession = false;
-
-  // optional: clear the in-memory RadioLib session too
   node.clearSession();
+  clearSavedSessionFlash();
 
-  // do one clean retry
   state = node.activateOTAA();
   Serial.print("activateOTAA() retry = ");
   Serial.println(state);
@@ -333,6 +400,7 @@ bool joinNetwork() {
     Serial.println("LoRaWAN join verified after retry.");
     saveNoncesToFlash();
     saveSessionToRtc();
+    saveSessionToFlash();
     return true;
   }
 
@@ -340,6 +408,7 @@ bool joinNetwork() {
   return false;
 }
 
+// -------------------- Battery --------------------
 static float readBatteryPercent() {
   digitalWrite(ADC_CTRL_PIN, HIGH);
   delay(10);
@@ -353,6 +422,9 @@ static float readBatteryPercent() {
     ((batteryVoltage - BATTERY_LOW_VOLTAGE) /
     (BATTERY_HIGH_VOLTAGE - BATTERY_LOW_VOLTAGE)) * 100.0f;
 
+  if (percent < 0.0f) percent = 0.0f;
+  if (percent > 100.0f) percent = 100.0f;
+
   Serial.print("Battery percent: ");
   Serial.print(percent, 1);
   Serial.println("%");
@@ -362,6 +434,7 @@ static float readBatteryPercent() {
   return percent;
 }
 
+// -------------------- Read + Send --------------------
 bool readAndSend() {
   Serial.print("Before uplink, node.isActivated() = ");
   Serial.println(node.isActivated() ? "true" : "false");
@@ -415,8 +488,9 @@ bool readAndSend() {
     Serial.println("Uplink failed.");
 
     if (!node.isActivated()) {
-      Serial.println("Session no longer active. Clearing RTC session cache.");
+      Serial.println("Session no longer active. Clearing cached session state.");
       hasRtcSession = false;
+      clearSavedSessionFlash();
     }
 
     return false;
@@ -424,16 +498,24 @@ bool readAndSend() {
 
   Serial.println("Uplink sent.");
   saveSessionToRtc();
+  saveSessionToFlash();
   return true;
 }
 
+// -------------------- Setup --------------------
 void setup() {
   Serial.begin(115200);
   delay(1500);
 
-
   Serial.println();
   Serial.println("Booting Heltec V3 sensor node...");
+  printWakeReason();
+
+  pinMode(ADC_CTRL_PIN, OUTPUT);
+  digitalWrite(ADC_CTRL_PIN, LOW);
+
+  analogReadResolution(12);
+  analogSetPinAttenuation(BATTERY_PIN, ADC_11db);
 
   bool sensorsOk = initSensors();
   bool radioOk = initRadio();
@@ -455,29 +537,17 @@ void setup() {
       delay(2000);
     }
   }
-
-  pinMode(ADC_CTRL_PIN, OUTPUT);
-  digitalWrite(ADC_CTRL_PIN, HIGH);
-
-  analogReadResolution(12);
-  analogSetPinAttenuation(BATTERY_PIN, ADC_11db);
 }
 
+// -------------------- Loop --------------------
 void loop() {
   readAndSend();
 
-  delay(60000);
+  Serial.println("Entering deep sleep...");
+  Serial.flush();
 
-  // 3. Prepare for Deep Sleep
-  Serial.println("Entering deep sleep for 10 minutes...");
-  Serial.flush(); // Ensure all serial data is printed before CPU stops
+  digitalWrite(ADC_CTRL_PIN, LOW);
 
-  // Power down high-current pins if necessary
-  digitalWrite(ADC_CTRL_PIN, LOW); 
-
-  // Set the timer and go to sleep
-  // esp_sleep_enable_timer_wakeup(TIME_TO_SLEEP_IN_SEC * uS_TO_S_FACTOR);
-  // esp_deep_sleep_start();
-
-  // deep sleep implementation 
+  esp_sleep_enable_timer_wakeup(TIME_TO_SLEEP_IN_SEC * uS_TO_S_FACTOR);
+  esp_deep_sleep_start();
 }
