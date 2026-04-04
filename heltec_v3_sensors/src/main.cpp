@@ -93,11 +93,13 @@ static void packPayload(
   uint16_t co2,
   float batteryPercent,
   float rh,
-  float bmpTemp
+  float bmpTemp, 
+  float bmpPressure
 ) {
   int16_t battPct = (int16_t)lroundf(batteryPercent * 100.0f);
   uint16_t hum = (uint16_t)lroundf(rh * 100.0f);
   int16_t bmpT = (int16_t)lroundf(bmpTemp * 100.0f);
+  int16_t bmpP = (int16_t)lroundf(bmpPressure * 100.0f);
 
   payload[0] = co2 & 0xFF;
   payload[1] = (co2 >> 8) & 0xFF;
@@ -110,6 +112,9 @@ static void packPayload(
 
   payload[6] = bmpT & 0xFF;
   payload[7] = (bmpT >> 8) & 0xFF;
+
+  payload[8] = bmpP & 0xFF;
+  payload[9] = (bmpP >> 8) & 0xFF;  
 }
 
 
@@ -234,12 +239,12 @@ bool initSensors() {
 bool initRadio() {
   SPI.begin(LORA_SCK, LORA_MISO, LORA_MOSI, LORA_CS);
 
-  int16_t state = radio.begin();
+  int16_t state = radio.begin(915.0);
   radio.setCurrentLimit(140.0);
-  radio.setOutputPower(26);
+  radio.setOutputPower(22);
 
-  radio.setSpreadingFactor(12);
-  radio.setBandwidth(125.0);
+  // radio.setSpreadingFactor(12);
+  // radio.setBandwidth(125.0);
   Serial.print("radio.begin() = ");
   Serial.println(state);
 
@@ -249,7 +254,7 @@ bool initRadio() {
 
   // Heltec V3 SX1262 board helpers
   radio.setDio2AsRfSwitch(true);
-  radio.setTCXO(1.8);
+  radio.setTCXO(0.8);
 
   Serial.println("SX1262 configured.");
   return true;
@@ -268,11 +273,15 @@ bool joinNetwork() {
     return false;
   }
 
+  node.setADR(true);
+  node.setTxPower(20);
   restoreNoncesFromFlash();
   restoreSessionFromRtc();
 
   state = node.activateOTAA();
   Serial.print("activateOTAA() = ");
+  
+  
   Serial.println(state);
 
   if (state == RADIOLIB_LORAWAN_SESSION_RESTORED) {
@@ -349,8 +358,8 @@ bool readAndSend() {
   int32_t pressure = bmp.readPressure();
   float batteryPercent = readBatteryPercent();
 
-  uint8_t payload[8];
-  packPayload(payload, co2, batteryPercent, humidity, bmpTemp);
+  uint8_t payload[10];
+  packPayload(payload, co2, batteryPercent, humidity, bmpTemp, pressure);
 
   Serial.println("Sending uplink...");
   int16_t state = node.sendReceive(payload, sizeof(payload), FPORT);
