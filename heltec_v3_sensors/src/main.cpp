@@ -15,9 +15,9 @@
 //                        USER SETTINGS
 // ============================================================
 
-// Set TRUE for one upload only to wipe bad saved nonce history.
+// Set TRUE for one upload only if you want to wipe bad saved nonce history.
 // After one successful fresh join, set this back to false.
-#define FORCE_CLEAR_NONCES_ONCE true
+#define FORCE_CLEAR_NONCES_ONCE false
 
 // Deep sleep in minutes
 #define TIME_TO_SLEEP_MINUTES 3
@@ -27,7 +27,7 @@
 #define ADC_CTRL_PIN 37
 #define BATTERY_LOW_VOLTAGE 3.10f
 #define BATTERY_HIGH_VOLTAGE 4.20f
-#define BATTERY_DIVIDER_RATIO 5.1f   // keep your existing calibration for now
+#define BATTERY_DIVIDER_RATIO 5.1f
 
 // I2C
 static const int SDA_PIN = 39;
@@ -71,10 +71,6 @@ SensirionI2cScd4x scd4x;
 
 SX1262 radio = new Module(LORA_CS, LORA_DIO1, LORA_RST, LORA_BUSY);
 LoRaWANNode* node = nullptr;
-
-// RTC memory survives deep sleep, not full power loss
-RTC_DATA_ATTR uint8_t lwSession[RADIOLIB_LORAWAN_SESSION_BUF_SIZE];
-RTC_DATA_ATTR bool hasRtcSession = false;
 
 // ============================================================
 //                        HELPERS
@@ -130,12 +126,8 @@ void printRadioLibState(const char* label, int16_t state) {
   Serial.println(state);
 }
 
-bool isTimerWake() {
-  return esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_TIMER;
-}
-
 // ============================================================
-//                 LORAWAN SESSION / NONCE STORAGE
+//                 LORAWAN NONCE STORAGE ONLY
 // ============================================================
 
 void saveNoncesToFlash() {
@@ -185,47 +177,16 @@ void clearNoncesInFlash() {
   Serial.println("Cleared LoRaWAN nonces from flash.");
 }
 
-void saveSessionToRtc() {
-  if (!node) return;
-
-  memcpy(lwSession, node->getBufferSession(), RADIOLIB_LORAWAN_SESSION_BUF_SIZE);
-  hasRtcSession = true;
-  Serial.println("Saved LoRaWAN session to RTC memory.");
-}
-
-bool restoreSessionFromRtc() {
-  if (!node) return false;
-
-  if (!hasRtcSession) {
-    Serial.println("No RTC session saved.");
-    return false;
-  }
-
-  int16_t state = node->setBufferSession(lwSession);
-  if (state == RADIOLIB_ERR_NONE) {
-    Serial.println("Restored LoRaWAN session from RTC memory.");
-    return true;
-  }
-
-  Serial.print("Failed to restore RTC session: ");
-  Serial.println(state);
-  return false;
-}
-
-void clearRtcSession() {
-  hasRtcSession = false;
-  memset(lwSession, 0, sizeof(lwSession));
-  Serial.println("Cleared RTC session.");
-}
-
 // ============================================================
 //                        PAYLOAD
 // ============================================================
 
-// NOTE:
-// This keeps the same general payload size, but fixes pressure packing.
-// Pressure is sent as hPa * 10.
-// Make sure your TTN payload formatter matches this.
+// Payload layout (10 bytes total):
+// [0..1]  CO2 ppm, uint16 little-endian
+// [2..3]  battery %, value * 100, int16 little-endian
+// [4..5]  humidity %, value * 100, uint16 little-endian
+// [6..7]  BMP180 temp C, value * 100, int16 little-endian
+// [8..9]  pressure hPa, value * 10, uint16 little-endian
 static void packPayload(
   uint8_t* payload,
   uint16_t co2,
@@ -391,7 +352,7 @@ static float readBatteryPercent() {
 }
 
 // ============================================================
-//                  SESSION RESTORE / OTAA JOIN
+//                  LORAWAN PREPARE / JOIN
 // ============================================================
 
 bool prepareLoRaWAN() {
@@ -401,7 +362,7 @@ bool prepareLoRaWAN() {
   }
 
   Serial.println("Preparing LoRaWAN state...");
-  Serial.println("Starting OTAA/restore...");
+  Serial.println("Starting OTAA...");
 
   int16_t state = node->beginOTAA(joinEUI, devEUI, NULL, appKey);
   Serial.print("beginOTAA() = ");
@@ -415,33 +376,6 @@ bool prepareLoRaWAN() {
   node->setDatarate(0);
   node->setTxPower(20);
 
-  if (isTimerWake()) {
-    Serial.println("Timer wake detected. Trying RTC session restore first...");
-
-    bool rtcOk = restoreSessionFromRtc();
-
-    state = node->activateOTAA();
-    Serial.print("activateOTAA() = ");
-    Serial.println(state);
-
-    bool activated = node->isActivated();
-    Serial.print("node.isActivated() = ");
-    Serial.println(activated ? "true" : "false");
-
-    if (rtcOk && activated) {
-      Serial.println("LoRaWAN session restored and verified.");
-      saveSessionToRtc();
-      return true;
-    }
-
-    Serial.println("RTC session restore path did not recover link. Falling back to fresh OTAA join.");
-    clearRtcSession();
-  } else {
-    Serial.println("Cold boot detected.");
-    clearRtcSession();
-  }
-
-  // Fresh OTAA join path
   restoreNoncesFromFlash();
 
   state = node->activateOTAA();
@@ -453,13 +387,12 @@ bool prepareLoRaWAN() {
   Serial.println(activated ? "true" : "false");
 
   if (!activated) {
-    Serial.println("Fresh OTAA join failed.");
+    Serial.println("OTAA failed.");
     return false;
   }
 
-  Serial.println("New LoRaWAN join successful.");
+  Serial.println("LoRaWAN active.");
   saveNoncesToFlash();
-  saveSessionToRtc();
   return true;
 }
 
@@ -513,15 +446,13 @@ bool sendUplinkOnce() {
   Serial.print("After uplink, node.isActivated() = ");
   Serial.println(node->isActivated() ? "true" : "false");
 
-  // RadioLib may return positive values when a downlink/MAC event occurs,
-  // so only treat negative values as failure.
+  // Positive values can still mean success with MAC activity/downlink.
   if (state < 0) {
     Serial.println("Uplink failed.");
     return false;
   }
 
   Serial.println("Uplink sent.");
-  saveSessionToRtc();
   return true;
 }
 
@@ -531,7 +462,7 @@ bool readAndSend() {
     return true;
   }
 
-  Serial.println("Reinitializing radio and restoring session once, without OTAA rejoin...");
+  Serial.println("Reinitializing radio and node once, without forcing an OTAA retry in this cycle...");
 
   if (!initRadio()) {
     Serial.println("Radio reinit failed.");
@@ -552,10 +483,7 @@ bool readAndSend() {
   node->setDatarate(0);
   node->setTxPower(20);
 
-  if (!restoreSessionFromRtc()) {
-    Serial.println("Could not restore RTC session after radio reinit.");
-    return false;
-  }
+  restoreNoncesFromFlash();
 
   state = node->activateOTAA();
   Serial.print("activateOTAA() after radio reinit = ");
@@ -565,11 +493,10 @@ bool readAndSend() {
   Serial.println(node->isActivated() ? "true" : "false");
 
   if (!node->isActivated()) {
-    Serial.println("Session not active after radio reinit.");
+    Serial.println("Node not active after radio reinit.");
     return false;
   }
 
-  // Retry send one time only, still without forcing a fresh join
   return sendUplinkOnce();
 }
 
@@ -595,7 +522,6 @@ void setup() {
   if (FORCE_CLEAR_NONCES_ONCE) {
     Serial.println("FORCE_CLEAR_NONCES_ONCE enabled.");
     clearNoncesInFlash();
-    clearRtcSession();
   }
 
   bool sensorsOk = initSensors();
