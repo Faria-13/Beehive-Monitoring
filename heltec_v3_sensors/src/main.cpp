@@ -3,6 +3,8 @@
 #include <SPI.h>
 #include <math.h>
 #include <Preferences.h>
+#include <esp_sleep.h>
+#include <esp_system.h>
 
 #include <Adafruit_BMP085.h>
 #include <SensirionI2CScd4x.h>
@@ -30,7 +32,7 @@ Preferences store;
 Adafruit_BMP085 bmp;
 SensirionI2cScd4x scd4x;
 
-// RTC data survives deep sleep, but not full power loss/reset.
+// RTC data survives deep sleep, but not full power loss/reset
 RTC_DATA_ATTR uint8_t lwSession[RADIOLIB_LORAWAN_SESSION_BUF_SIZE];
 RTC_DATA_ATTR bool hasRtcSession = false;
 
@@ -100,6 +102,36 @@ void printWakeReason() {
       break;
     default:
       Serial.printf("OTHER (%d)\n", wakeup_reason);
+      break;
+  }
+}
+
+void printResetReason() {
+  Serial.print("Reset reason CPU0: ");
+  Serial.println((int)esp_reset_reason());
+}
+
+void printRadioLibState(const char* label, int16_t state) {
+  Serial.print(label);
+  Serial.print(" = ");
+  Serial.println(state);
+
+  switch (state) {
+    case RADIOLIB_ERR_NONE:
+      Serial.println("Meaning: success");
+      break;
+#ifdef RADIOLIB_ERR_TX_TIMEOUT
+    case RADIOLIB_ERR_TX_TIMEOUT:
+      Serial.println("Meaning: TX timeout");
+      break;
+#endif
+#ifdef RADIOLIB_ERR_NETWORK_NOT_JOINED
+    case RADIOLIB_ERR_NETWORK_NOT_JOINED:
+      Serial.println("Meaning: network not joined");
+      break;
+#endif
+    default:
+      Serial.println("Meaning: other RadioLib error");
       break;
   }
 }
@@ -303,9 +335,6 @@ bool initRadio() {
   SPI.begin(LORA_SCK, LORA_MISO, LORA_MOSI, LORA_CS);
 
   int16_t state = radio.begin(915.0);
-  radio.setCurrentLimit(140.0);
-  radio.setOutputPower(22);
-
   Serial.print("radio.begin() = ");
   Serial.println(state);
 
@@ -313,9 +342,12 @@ bool initRadio() {
     return false;
   }
 
-  // Heltec V3 helpers
+  delay(50);
+
   radio.setDio2AsRfSwitch(true);
   radio.setTCXO(0.8);
+  radio.setCurrentLimit(140.0);
+  radio.setOutputPower(22);
 
   Serial.println("SX1262 configured.");
   return true;
@@ -341,10 +373,8 @@ bool joinNetwork() {
   restoreNoncesFromFlash();
 
   bool hadRtcSession = restoreSessionFromRtc();
-  bool hadFlashSession = false;
-
   if (!hadRtcSession) {
-    hadFlashSession = restoreSessionFromFlash();
+    restoreSessionFromFlash();
   }
 
   state = node.activateOTAA();
@@ -436,6 +466,7 @@ static float readBatteryPercent() {
 
 // -------------------- Read + Send --------------------
 bool readAndSend() {
+  Serial.println("---- readAndSend() ----");
   Serial.print("Before uplink, node.isActivated() = ");
   Serial.println(node.isActivated() ? "true" : "false");
 
@@ -476,13 +507,33 @@ bool readAndSend() {
   uint8_t payload[10];
   packPayload(payload, co2, batteryPercent, humidity, bmpTemp, pressure);
 
+  delay(200);
+
   Serial.println("Sending uplink...");
   int16_t state = node.sendReceive(payload, sizeof(payload), FPORT, false);
-  Serial.print("sendReceive() = ");
-  Serial.println(state);
+  printRadioLibState("sendReceive()", state);
 
   Serial.print("After uplink, node.isActivated() = ");
   Serial.println(node.isActivated() ? "true" : "false");
+
+#ifdef RADIOLIB_ERR_TX_TIMEOUT
+  if (state == RADIOLIB_ERR_TX_TIMEOUT) {
+    Serial.println("TX timeout detected. Reinitializing radio and retrying once...");
+
+    if (!initRadio()) {
+      Serial.println("Radio reinit failed.");
+      return false;
+    }
+
+    delay(200);
+
+    state = node.sendReceive(payload, sizeof(payload), FPORT, false);
+    printRadioLibState("sendReceive() retry", state);
+
+    Serial.print("After retry, node.isActivated() = ");
+    Serial.println(node.isActivated() ? "true" : "false");
+  }
+#endif
 
   if (state < 0) {
     Serial.println("Uplink failed.");
@@ -509,6 +560,7 @@ void setup() {
 
   Serial.println();
   Serial.println("Booting Heltec V3 sensor node...");
+  printResetReason();
   printWakeReason();
 
   pinMode(ADC_CTRL_PIN, OUTPUT);
