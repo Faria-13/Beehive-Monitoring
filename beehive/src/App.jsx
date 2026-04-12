@@ -1,28 +1,76 @@
-import React, { useEffect, useState } from "react";
-import { supabase } from "./createClient";
-import { Routes, Route } from "react-router-dom";
-import Temperature from "./pages/Temperature";
-import Humidity from "./pages/Humidity";
-import Weight from "./pages/Weight";
-import WebsiteNav from "./components/topNav";
-import Carbon from "./pages/Carbon";
-import Volume from "./pages/Volume";
+import { Routes, Route, Navigate } from "react-router-dom";
+import HiveDashboard from "./pages/HiveDashboard";
+import Login from "./pages/Login";
+import ProtectedRoute from "./components/ProtectedRoute";
+import HiveOverview from "./pages/HiveOverview";
+import AdminOverview from "./pages/AdminOverview";
+import AlertsPage from "./pages/AlertsPage";
+import DatabasePage from "./pages/DatabasePage";
+import SettingsPage from "./pages/SettingsPage";
 
 function App() {
   return (
-    <>
-      <WebsiteNav />
+    <div>
+      <Routes>
+        <Route path="/login" element={<Login />} />
 
-      <div style={{ padding: "24px" }}>
-        <Routes>
-          <Route path="/" element={<Temperature />} />
-          <Route path="/humidity" element={<Humidity />} />
-          <Route path="/weight" element={<Weight />} />
-          <Route path="/carbon" element={<Carbon />} />
-          <Route path="/volume" element={<Volume />} />
-        </Routes>
-      </div>
-    </>
+        <Route
+          path="/hives"
+          element={
+            <ProtectedRoute>
+              <HiveOverview />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/admin"
+          element={
+            <ProtectedRoute>
+              <AdminOverview />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/hives/:hiveId"
+          element={
+            <ProtectedRoute>
+              <HiveDashboard />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/alerts"
+          element={
+            <ProtectedRoute>
+              <AlertsPage />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/database"
+          element={
+            <ProtectedRoute>
+              <DatabasePage />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/settings"
+          element={
+            <ProtectedRoute>
+              <SettingsPage />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route path="/" element={<Navigate to="/hives" replace />} />
+      </Routes>
+    </div>
   );
 }
 
