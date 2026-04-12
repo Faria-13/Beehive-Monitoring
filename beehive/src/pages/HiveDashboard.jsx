@@ -179,7 +179,7 @@ export default function HiveDashboard() {
     <>
       <NavBar onDatabaseClick={() => navigate(`/database?hive=${hiveId}`)} />
 
-      <Box sx={{ px: 2, py: 2, maxWidth: 1400, mx: "auto" }}>
+      <Box sx={{ px: "50px", pt: "50px", pb: 2, maxWidth: 1400, mx: "auto" }}>
 
         {/* ── Row 1: Your Hive Live ── */}
         <SectionHeader>Your Hive Live</SectionHeader>
@@ -226,6 +226,7 @@ export default function HiveDashboard() {
           showLocalWeather={true}
         />
 
+        <Box sx={{ pb: "50px" }} />
       </Box>
     </>
   );

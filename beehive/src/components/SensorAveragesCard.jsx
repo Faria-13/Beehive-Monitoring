@@ -139,6 +139,7 @@ export default function SensorAveragesCard({
           height: "100%",
           display: "flex",
           flexDirection: "column",
+          px: "25px",
         }}
       >
         {/* ── Header with clickable date range ── */}
@@ -189,7 +190,7 @@ export default function SensorAveragesCard({
         ) : rows.length === 0 ? (
           <Typography>No sensors or no date range selected.</Typography>
         ) : (
-          <Stack sx={{ flex: 1, justifyContent: "space-between" }}>
+          <Stack sx={{ flex: 1, justifyContent: "space-between", pb: "20px" }}>
             {rows.map((r) => (
               <Stack
                 key={r.sensorId}
