@@ -18,6 +18,7 @@ export default function HiveOverview() {
   const [hives, setHives] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
     if (!user) return;
@@ -142,7 +143,26 @@ export default function HiveOverview() {
           })
         );
 
-        setHives(enrichedHives);
+        // Fetch active (unresolved) alerts for all hives in one query
+        const hiveIds = safeHives.map((h) => h.hive_id);
+        let activeAlertHiveIds = new Set();
+        if (hiveIds.length > 0) {
+          const { data: alertData } = await supabase
+            .from("alerts")
+            .select("hive_id")
+            .eq("resolved", false)
+            .in("hive_id", hiveIds);
+          if (alertData) {
+            alertData.forEach((a) => activeAlertHiveIds.add(a.hive_id));
+          }
+        }
+
+        setHives(
+          enrichedHives.map((hive) => ({
+            ...hive,
+            hasActiveAlerts: activeAlertHiveIds.has(hive.hive_id),
+          }))
+        );
       } catch (e) {
         setError(e.message || "Failed to load hives");
       } finally {
@@ -151,7 +171,7 @@ export default function HiveOverview() {
     }
 
     load();
-  }, [user]);
+  }, [user, refreshKey]);
 
   const uiHives = useMemo(() => {
     return hives.map((hive) => ({
@@ -161,8 +181,11 @@ export default function HiveOverview() {
         hive.currentTemp == null
           ? "--"
           : `${Math.round(hive.currentTemp * 100) / 100}${hive.tempUnit ?? ""}`,
+      tempValue: hive.currentTemp,
+      createdAt: hive.created_at ?? null,
       status: hive.hive_status || "unknown",
       systemOnline: hive.hive_status?.toLowerCase() === "active",
+      hasActiveAlerts: hive.hasActiveAlerts ?? false,
       avatarUrl: hive.avatarUrl,
       fallbackIcon: hive.fallbackIcon,
       avatarBgColor: hive.resolvedBgColor,
@@ -186,9 +209,11 @@ export default function HiveOverview() {
             (validTemps.reduce((sum, temp) => sum + temp, 0) / validTemps.length) * 100
           ) / 100;
 
+    const activeAlerts = hives.filter((hive) => hive.hasActiveAlerts).length;
+
     return {
       totalHives,
-      activeAlerts: 0,
+      activeAlerts,
       avgTemp: avgTemp === "--" ? "--" : `${avgTemp}°C`,
       systemsOnline,
     };
@@ -211,9 +236,7 @@ export default function HiveOverview() {
       userName={appUser?.first_name || "User"}
       stats={stats}
       hives={uiHives}
-      onSortClick={() => {}}
-      onFilterClick={() => {}}
-      onAlertsClick={() => {}}
+      onHiveUpdated={() => setRefreshKey((k) => k + 1)}
       onDatabaseClick={() => {}}
       onSettingsClick={() => {}}
     />

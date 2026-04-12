@@ -4,10 +4,13 @@ import Login from "./pages/Login";
 import ProtectedRoute from "./components/ProtectedRoute";
 import HiveOverview from "./pages/HiveOverview";
 import AdminOverview from "./pages/AdminOverview";
+import AlertsPage from "./pages/AlertsPage";
+import DatabasePage from "./pages/DatabasePage";
+import SettingsPage from "./pages/SettingsPage";
 
 function App() {
   return (
-    <div style={{ padding: "24px" }}>
+    <div>
       <Routes>
         <Route path="/login" element={<Login />} />
 
@@ -34,6 +37,33 @@ function App() {
           element={
             <ProtectedRoute>
               <HiveDashboard />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/alerts"
+          element={
+            <ProtectedRoute>
+              <AlertsPage />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/database"
+          element={
+            <ProtectedRoute>
+              <DatabasePage />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/settings"
+          element={
+            <ProtectedRoute>
+              <SettingsPage />
             </ProtectedRoute>
           }
         />
