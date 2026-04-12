@@ -30,6 +30,7 @@ import {
 import ArrowRightIcon from "@mui/icons-material/ArrowRight";
 import MenuIcon from "@mui/icons-material/Menu";
 import DubaiLogo from "../assets/DubaiLogo.png";
+import overviewBg from "../assets/overviewBackground.png";
 
 function HiveAvatar({ hive, onEditClick }) {
   const [hovered, setHovered] = useState(false);
@@ -524,7 +525,17 @@ export default function HiveOverviewUI({
   const isTablet = useMediaQuery(theme.breakpoints.between("sm", "md"));
 
   return (
-    <Box sx={{ minHeight: "100vh", bgcolor: "#fff9e9" }}>
+    <Box
+      sx={{
+        minHeight: "100vh",
+        bgcolor: "#fff9e9",
+        backgroundImage: `url(${overviewBg})`,
+        backgroundSize: "cover",
+        backgroundPosition: "center",
+        backgroundAttachment: "fixed",
+        backgroundRepeat: "no-repeat",
+      }}
+    >
       <NavBar
         appTitle={appTitle}
         onDatabaseClick={onDatabaseClick}

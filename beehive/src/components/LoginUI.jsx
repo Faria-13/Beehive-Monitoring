@@ -6,6 +6,7 @@ import {
   Paper,
   Typography,
 } from "@mui/material";
+import loginBg from "../assets/LogInBackground.png";
 
 export default function LoginUI({
   activeTab = "login",
@@ -29,6 +30,11 @@ export default function LoginUI({
         minHeight: "100vh",
         width: "100%",
         bgcolor: "#fbc139",
+        backgroundImage: `url(${loginBg})`,
+        backgroundSize: "cover",
+        backgroundPosition: "center",
+        backgroundAttachment: "fixed",
+        backgroundRepeat: "no-repeat",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",

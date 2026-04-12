@@ -1,96 +1,69 @@
-import React from "react";
+import React, { useState } from "react";
 import { Link } from "react-router-dom";
+import { NavBar } from "./HiveOverviewUI";
 import {
-  AppBar,
   Box,
+  Button,
   InputBase,
   Paper,
   Stack,
-  Toolbar,
   Typography,
-  Button,
+  useMediaQuery,
+  useTheme,
 } from "@mui/material";
 import SearchIcon from "@mui/icons-material/Search";
 import ArrowRightIcon from "@mui/icons-material/ArrowRight";
 
-const HEX_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="220" height="190">
-  <polygon points="110,4 210,58 210,166 110,186 10,132 10,58"
-    fill="none" stroke="rgba(251,193,57,0.5)" stroke-width="2.5"/>
-</svg>`;
-const HEX_BG = `url("data:image/svg+xml,${encodeURIComponent(HEX_SVG)}")`;
-
-function NavBar({
-  appTitle = "DUBAI Hive Monitoring",
-  onAlertsClick,
-  onDatabaseClick,
-  onSettingsClick,
-}) {
-  return (
-    <AppBar position="static" elevation={4} sx={{ bgcolor: "#fbc139", color: "black" }}>
-      <Toolbar sx={{ px: 3 }}>
-        <Box sx={{ width: 60, height: 60, bgcolor: "white", flexShrink: 0, mr: 2 }} />
-        <Typography
-          fontFamily="Poppins, sans-serif"
-          fontWeight={700}
-          fontSize={22}
-          color="white"
-          sx={{ textDecoration: "underline", flexGrow: 1 }}
-        >
-          {appTitle}
-        </Typography>
-        <Stack direction="row" spacing={4}>
-          {[
-            { label: "Alerts", onClick: onAlertsClick },
-            { label: "Database", onClick: onDatabaseClick },
-            { label: "Settings", onClick: onSettingsClick },
-          ].map(({ label, onClick }) => (
-            <Typography
-              key={label}
-              component="span"
-              fontFamily="Inter, sans-serif"
-              fontWeight={500}
-              fontSize={20}
-              sx={{ cursor: "pointer", "&:hover": { opacity: 0.75 } }}
-              onClick={onClick}
-            >
-              {label}
-            </Typography>
-          ))}
-        </Stack>
-      </Toolbar>
-    </AppBar>
-  );
-}
+// ─── Stat card ────────────────────────────────────────────────────────────────
 
 function StatCard({ label, value }) {
   return (
     <Paper
       variant="outlined"
       sx={{
-        px: 4,
-        py: 3,
+        px: { xs: 1.5, sm: 2.5, md: 4 },
+        py: { xs: 1, sm: 1.5, md: 3 },
         bgcolor: "#fff9e9",
         border: "2px solid black",
         borderRadius: "11px",
-        whiteSpace: "nowrap",
       }}
     >
-      <Typography fontFamily="Inter, sans-serif" fontWeight={600} fontSize={16} textAlign="center">
+      <Typography
+        fontFamily="Inter, sans-serif"
+        fontWeight={600}
+        fontSize={{ xs: 11, sm: 13, md: 16 }}
+        textAlign="center"
+      >
         {label}: {value}
       </Typography>
     </Paper>
   );
 }
 
-function HiveCard({ hive }) {
+// ─── Hive card ────────────────────────────────────────────────────────────────
+
+function HiveCard({ hive, isMobile, isTablet }) {
+  const cardW = isMobile ? "100%" : isTablet ? 220 : 283;
+  const cardH = isMobile ? 160 : isTablet ? 148 : 191;
+  const cardMaxW = isMobile ? 420 : undefined;
+
+  const nameTop   = isMobile ? 12 : isTablet ? 14 : 18;
+  const nameLeft  = isMobile ? 14 : isTablet ? 15 : 19;
+  const nameFontSize = isTablet || isMobile ? 16 : 20;
+
+  const infoTop  = isMobile ? 52 : isTablet ? 50 : 64;
+  const infoLeft = isMobile ? 14 : isTablet ? 15 : 19;
+  const infoFontSize = isTablet ? 11 : 12;
+
   return (
     <Paper
       component={Link}
       to={`/hives/${hive.hive_id}`}
       variant="outlined"
       sx={{
-        width: 283,
-        height: 191,
+        width: cardW,
+        maxWidth: cardMaxW,
+        height: cardH,
         bgcolor: "#fff9e9",
         border: "2px solid black",
         borderRadius: "11px",
@@ -101,45 +74,23 @@ function HiveCard({ hive }) {
         textDecoration: "none",
         color: "inherit",
         display: "block",
-        "&:hover": {
-          transform: "translateY(-2px)",
-          transition: "0.2s ease",
-        },
+        "&:hover": { transform: "translateY(-2px)", transition: "0.2s ease" },
       }}
     >
       <Typography
         fontFamily="Poppins, sans-serif"
         fontWeight={600}
-        fontSize={20}
-        sx={{ position: "absolute", top: 18, left: 19 }}
+        fontSize={nameFontSize}
+        sx={{ position: "absolute", top: nameTop, left: nameLeft }}
       >
         {hive.name}
       </Typography>
-      <Box
-        sx={{
-          position: "absolute",
-          top: 58,
-          left: 21,
-          width: 108,
-          height: 108,
-          bgcolor: "white",
-          border: "2px solid black",
-          borderRadius: "11px",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-        }}
-      >
-        {hive.icon ?? null}
-      </Box>
-      <Stack spacing={0.5} sx={{ position: "absolute", top: 64, left: 144 }}>
-        <Typography fontFamily="Inter, sans-serif" fontWeight={500} fontSize={12}>
-          current temp: {hive.currentTemp}
-        </Typography>
-        <Typography fontFamily="Inter, sans-serif" fontWeight={500} fontSize={12}>
+
+      <Stack spacing={0.5} sx={{ position: "absolute", top: infoTop, left: infoLeft }}>
+        <Typography fontFamily="Inter, sans-serif" fontWeight={500} fontSize={infoFontSize}>
           hive status: {hive.status}
         </Typography>
-        <Typography fontFamily="Inter, sans-serif" fontWeight={500} fontSize={12}>
+        <Typography fontFamily="Inter, sans-serif" fontWeight={500} fontSize={infoFontSize}>
           system online: {hive.systemOnline ? "y" : "n"}
         </Typography>
       </Stack>
@@ -147,54 +98,137 @@ function HiveCard({ hive }) {
   );
 }
 
+// ─── User card ────────────────────────────────────────────────────────────────
+
+function UserCard({ user, isMobile, isTablet }) {
+  const cardW    = isMobile ? "100%" : isTablet ? 220 : 283;
+  const cardMaxW = isMobile ? 420 : undefined;
+
+  const nameFontSize  = isTablet ? 15 : 18;
+  const emailFontSize = isTablet ? 10 : 11;
+  const infoFontSize  = isTablet ? 12 : 13;
+
+  return (
+    <Paper
+      variant="outlined"
+      sx={{
+        width: cardW,
+        maxWidth: cardMaxW,
+        bgcolor: "#fff9e9",
+        border: "2px solid black",
+        borderRadius: "11px",
+        overflow: "hidden",
+        boxShadow: "0px 4px 4px rgba(0,0,0,0.25)",
+        flexShrink: 0,
+        display: "flex",
+        flexDirection: "column",
+        "&:hover": { transform: "translateY(-2px)", transition: "0.2s ease" },
+      }}
+    >
+      {/* Coloured header strip */}
+      <Box sx={{ bgcolor: "#fbc139", px: 2, py: 1.25, borderBottom: "2px solid black" }}>
+        <Typography
+          fontFamily="Poppins, sans-serif"
+          fontWeight={700}
+          fontSize={nameFontSize}
+          noWrap
+        >
+          {[user.first_name, user.last_name].filter(Boolean).join(" ") || "—"}
+        </Typography>
+      </Box>
+
+      {/* Body */}
+      <Box
+        sx={{
+          px: 2,
+          py: { xs: 1.5, sm: 2 },
+          flex: 1,
+          display: "flex",
+          flexDirection: "column",
+          justifyContent: "space-between",
+        }}
+      >
+        <Typography
+          fontFamily="Inter, sans-serif"
+          fontSize={emailFontSize}
+          color="text.secondary"
+          noWrap
+          mb={1.5}
+        >
+          {user.email ?? "—"}
+        </Typography>
+
+        <Stack spacing={0.75}>
+          <Typography fontFamily="Inter, sans-serif" fontWeight={500} fontSize={infoFontSize}>
+            🐝 Hives: {user.hiveCount ?? 0}
+          </Typography>
+          <Typography
+            fontFamily="Inter, sans-serif"
+            fontWeight={500}
+            fontSize={infoFontSize}
+            color={user.alertCount > 0 ? "#FF4D4D" : "inherit"}
+          >
+            ⚠ Active Alerts: {user.alertCount ?? 0}
+          </Typography>
+        </Stack>
+      </Box>
+    </Paper>
+  );
+}
+
+// ─── Main component ───────────────────────────────────────────────────────────
+
 export default function AdminOverviewUI({
   stats,
   hives,
+  users = [],
   activeTab = "hives",
   searchValue = "",
   appTitle,
   onTabChange,
   onSearchChange,
   onFilterClick,
-  onAlertsClick,
-  onDatabaseClick,
-  onSettingsClick,
 }) {
-  return (
-    <Box
-      sx={{
-        minHeight: "100vh",
-        bgcolor: "#fff9e9",
-        backgroundImage: HEX_BG,
-        backgroundSize: "220px 190px",
-        overflow: "hidden",
-      }}
-    >
-      <NavBar
-        appTitle={appTitle}
-        onAlertsClick={onAlertsClick}
-        onDatabaseClick={onDatabaseClick}
-        onSettingsClick={onSettingsClick}
-      />
+  const theme    = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
+  const isTablet = useMediaQuery(theme.breakpoints.between("sm", "md"));
 
-      <Box sx={{ px: 6, py: 4 }}>
+  const items = activeTab === "users" ? users : hives;
+
+  return (
+    <Box sx={{ minHeight: "100vh", bgcolor: "#fff9e9" }}>
+      <NavBar appTitle={appTitle} />
+
+      <Box sx={{ px: { xs: 2, sm: 4, md: 6 }, py: { xs: 2, sm: 3, md: 4 } }}>
+
+        {/* Title */}
         <Typography
           fontFamily="Poppins, sans-serif"
           fontWeight={500}
-          fontSize={60}
+          fontSize={{ xs: 32, sm: 44, md: 60 }}
           textAlign="center"
-          mb={4}
+          mb={{ xs: 2, sm: 3, md: 4 }}
         >
           admin page
         </Typography>
 
-        <Stack direction="row" spacing={3} justifyContent="center" flexWrap="wrap" mb={4}>
-          <StatCard label="Total Hives" value={stats.totalHives} />
-          <StatCard label="Active Alerts" value={stats.activeAlerts} />
-          <StatCard label="Systems Offline" value={stats.systemsOffline} />
-          <StatCard label="Systems Online" value={stats.systemsOnline} />
+        {/* Stat cards */}
+        <Stack
+          useFlexGap
+          direction="row"
+          spacing={{ xs: 1, sm: 2, md: 3 }}
+          rowGap={{ xs: 1.5, sm: 2, md: 2.5 }}
+          justifyContent="center"
+          flexWrap="wrap"
+          mb={{ xs: 3, sm: 4, md: 4 }}
+        >
+          <StatCard label="Total Hives"     value={stats.totalHives}    />
+          <StatCard label="Active Alerts"   value={stats.activeAlerts}  />
+          <StatCard label="Systems Offline" value={stats.systemsOffline}/>
+          <StatCard label="Systems Online"  value={stats.systemsOnline} />
         </Stack>
 
+        {/* Search bar */}
         <Box
           sx={{
             display: "flex",
@@ -213,21 +247,27 @@ export default function AdminOverviewUI({
           <SearchIcon sx={{ color: "#d9d9d9", flexShrink: 0 }} />
           <InputBase
             fullWidth
-            placeholder="Search for Users or Hives"
+            placeholder={activeTab === "users" ? "Search users…" : "Search hives…"}
             value={searchValue}
             onChange={(e) => onSearchChange?.(e.target.value)}
-            inputProps={{ "aria-label": "search" }}
             sx={{
               fontFamily: "Inter, sans-serif",
               fontWeight: 600,
-              fontSize: 16,
+              fontSize: { xs: 14, sm: 16 },
               color: "black",
               "& ::placeholder": { color: "black", opacity: 1 },
             }}
           />
         </Box>
 
-        <Stack direction="row" alignItems="center" justifyContent="center" spacing={2} mb={3}>
+        {/* Tab row */}
+        <Stack
+          direction="row"
+          alignItems="center"
+          justifyContent="center"
+          spacing={2}
+          mb={{ xs: 2, sm: 2.5, md: 3 }}
+        >
           {["hives", "users"].map((tab) => {
             const isActive = activeTab === tab;
             return (
@@ -236,10 +276,11 @@ export default function AdminOverviewUI({
                 component="span"
                 fontFamily="Poppins, sans-serif"
                 fontWeight={700}
-                fontSize={32}
-                color={isActive ? "black" : "rgba(0,0,0,0.5)"}
+                fontSize={{ xs: 20, sm: 26, md: 32 }}
+                color={isActive ? "black" : "rgba(0,0,0,0.4)"}
                 sx={{
                   textDecoration: isActive ? "underline" : "none",
+                  textUnderlineOffset: "5px",
                   cursor: "pointer",
                   userSelect: "none",
                   px: 1,
@@ -257,11 +298,11 @@ export default function AdminOverviewUI({
             endIcon={<ArrowRightIcon />}
             onClick={onFilterClick}
             sx={{
-              ml: 4,
+              ml: { xs: 1, md: 4 },
               color: "black",
               fontFamily: "Inter, sans-serif",
               fontWeight: 500,
-              fontSize: 24,
+              fontSize: { xs: 15, sm: 18, md: 24 },
               textTransform: "none",
             }}
           >
@@ -269,11 +310,45 @@ export default function AdminOverviewUI({
           </Button>
         </Stack>
 
-        <Stack direction="row" spacing={3} justifyContent="center" flexWrap="wrap">
-          {hives.map((hive, i) => (
-            <HiveCard key={hive.hive_id ?? hive.name ?? i} hive={hive} />
-          ))}
-        </Stack>
+        {/* Card grid */}
+        {items.length === 0 ? (
+          <Typography fontFamily="Inter, sans-serif" color="text.secondary" textAlign="center">
+            No {activeTab} found.
+          </Typography>
+        ) : (
+          <Box
+            sx={{
+              display: "grid",
+              gridTemplateColumns: isMobile
+                ? "1fr"
+                : isTablet
+                ? "repeat(2, 220px)"
+                : "repeat(auto-fit, 283px)",
+              gap: { xs: 2, sm: 2.5, md: 3 },
+              justifyContent: "center",
+              maxWidth: isMobile ? 420 : "100%",
+              mx: isMobile ? "auto" : 0,
+            }}
+          >
+            {activeTab === "users"
+              ? users.map((u, i) => (
+                  <UserCard
+                    key={u.user_id ?? i}
+                    user={u}
+                    isMobile={isMobile}
+                    isTablet={isTablet}
+                  />
+                ))
+              : hives.map((hive, i) => (
+                  <HiveCard
+                    key={hive.hive_id ?? i}
+                    hive={hive}
+                    isMobile={isMobile}
+                    isTablet={isTablet}
+                  />
+                ))}
+          </Box>
+        )}
       </Box>
     </Box>
   );
