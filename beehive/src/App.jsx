@@ -1,29 +1,124 @@
-import React from "react";
-import { Routes, Route } from "react-router-dom";
-import Temperature from "./pages/Temperature";
-import Humidity from "./pages/Humidity";
-import Weight from "./pages/Weight";
-import WebsiteNav from "./components/topNav";
-import Carbon from "./pages/Carbon";
-import Volume from "./pages/Volume";
+import { Routes, Route, Navigate } from "react-router-dom";
+import HiveDashboard from "./pages/HiveDashboard";
+import Login from "./pages/Login";
+import ProtectedRoute from "./components/ProtectedRoute";
+import HiveOverview from "./pages/HiveOverview";
+import AdminOverview from "./pages/AdminOverview";
 import AlertsPage from "./pages/AlertsPage";
+import DatabasePage from "./pages/DatabasePage";
+import SettingsPage from "./pages/SettingsPage";
+import RequestAccess from "./pages/RequestAccess";
+import SignupSubmitted from "./pages/SignupSubmitted";
+import AccountPending from "./pages/AccountPending";
+import AccountReady from "./pages/AccountReady";
+import AdminPendingRequests from "./pages/AdminPendingRequests";
+import AdminRequestReview from "./pages/AdminRequestReview";
+import AdminDatabasePage from "./pages/AdminDatabasePage";
+import AdminAlertsPage from "./pages/AdminAlertsPage";
 
 function App() {
   return (
-    <>
-      <WebsiteNav />
+    <div>
+      <Routes>
+        <Route path="/login" element={<Login />} />
+        <Route path="/request-access" element={<RequestAccess />} />
+        <Route path="/signup-submitted" element={<SignupSubmitted />} />
+        <Route path="/account-pending" element={<AccountPending />} />
+        <Route path="/account-ready" element={<AccountReady />} />
 
-      <div style={{ padding: "24px" }}>
-        <Routes>
-          <Route path="/"         element={<Temperature />} />
-          <Route path="/humidity" element={<Humidity />} />
-          <Route path="/weight"   element={<Weight />} />
-          <Route path="/carbon"   element={<Carbon />} />
-          <Route path="/volume"   element={<Volume />} />
-          <Route path="/alerts"   element={<AlertsPage />} />
-        </Routes>
-      </div>
-    </>
+        <Route
+          path="/hives"
+          element={
+            <ProtectedRoute>
+              <HiveOverview />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/admin"
+          element={
+            <ProtectedRoute>
+              <AdminOverview />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/admin/requests"
+          element={
+            <ProtectedRoute>
+              <AdminPendingRequests />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/admin/requests/:requestId"
+          element={
+            <ProtectedRoute>
+              <AdminRequestReview />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/admin/database"
+          element={
+            <ProtectedRoute>
+              <AdminDatabasePage />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/admin/alerts"
+          element={
+            <ProtectedRoute>
+              <AdminAlertsPage />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/hives/:hiveId"
+          element={
+            <ProtectedRoute>
+              <HiveDashboard />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/alerts"
+          element={
+            <ProtectedRoute>
+              <AlertsPage />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/database"
+          element={
+            <ProtectedRoute>
+              <DatabasePage />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/settings"
+          element={
+            <ProtectedRoute>
+              <SettingsPage />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route path="/" element={<Navigate to="/hives" replace />} />
+      </Routes>
+    </div>
   );
 }
 

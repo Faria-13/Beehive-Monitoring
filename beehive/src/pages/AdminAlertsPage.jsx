@@ -1,11 +1,21 @@
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { supabase } from "../createClient";
-import { useAuth } from "../context/AuthContext";
-import { NavBar } from "../components/HiveOverviewUI";
+import AdminNavBar from "../components/AdminNavBar";
 import Footer from "../components/Footer";
-
-// ─── helpers ────────────────────────────────────────────────────────────────
+import {
+  Box,
+  Button,
+  Checkbox,
+  Chip,
+  Divider,
+  Menu,
+  MenuItem,
+  Paper,
+  Stack,
+  Typography,
+} from "@mui/material";
+import ArrowDropDownIcon from "@mui/icons-material/ArrowDropDown";
 
 const LEVEL_META = {
   critical: {
@@ -41,7 +51,56 @@ function fmtTime(ts) {
   });
 }
 
-// ─── Toast ──────────────────────────────────────────────────────────────────
+function MultiSelectFilter({ label, options, selected, onToggle, onSelectAll, onClearAll, getLabel }) {
+  const [anchor, setAnchor] = useState(null);
+  const allSelected = selected.length === options.length;
+  const someSelected = selected.length > 0 && !allSelected;
+
+  return (
+    <>
+      <Button
+        variant="outlined"
+        endIcon={<ArrowDropDownIcon />}
+        onClick={(e) => setAnchor(e.currentTarget)}
+        sx={{
+          borderColor: someSelected || (selected.length > 0 && !allSelected) ? "#FE9805" : "#ccc",
+          color: "black",
+          textTransform: "none",
+          fontFamily: "Inter, sans-serif",
+          fontSize: 14,
+          whiteSpace: "nowrap",
+        }}
+      >
+        {label}
+        {selected.length > 0 && selected.length < options.length && (
+          <Chip
+            label={selected.length}
+            size="small"
+            sx={{ ml: 1, height: 18, fontSize: 11, bgcolor: "#FE9805", color: "white" }}
+          />
+        )}
+      </Button>
+
+      <Menu anchorEl={anchor} open={Boolean(anchor)} onClose={() => setAnchor(null)}>
+        <MenuItem dense onClick={allSelected ? onClearAll : onSelectAll}>
+          <Checkbox size="small" checked={allSelected} indeterminate={someSelected} sx={{ p: 0.5 }} />
+          <Typography fontSize={13} sx={{ ml: 1 }}>
+            {allSelected ? "Deselect all" : "Select all"}
+          </Typography>
+        </MenuItem>
+        <Divider />
+        {options.map((opt) => (
+          <MenuItem key={String(opt)} dense onClick={() => onToggle(opt)}>
+            <Checkbox size="small" checked={selected.includes(opt)} sx={{ p: 0.5 }} />
+            <Typography fontSize={13} sx={{ ml: 1 }}>
+              {getLabel ? getLabel(opt) : String(opt)}
+            </Typography>
+          </MenuItem>
+        ))}
+      </Menu>
+    </>
+  );
+}
 
 function Toast({ toasts, onDismiss }) {
   return (
@@ -60,7 +119,7 @@ function Toast({ toasts, onDismiss }) {
             <span style={{ color: meta.color, fontSize: 18 }}>{meta.icon}</span>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={styles.toastTitle}>
-                Hive {t.hive_id} — {meta.label}
+                {t.user_name} — Hive {t.hive_id}
               </div>
               <div style={styles.toastMsg}>{t.message}</div>
             </div>
@@ -73,14 +132,6 @@ function Toast({ toasts, onDismiss }) {
     </div>
   );
 }
-
-// ─── Alert row ──────────────────────────────────────────────────────────────
-
-const GLOW_ANIMATIONS = {
-  critical: "glowFlashRed 1.2s ease 4",
-  warning:  "glowFlashOrange 1.2s ease 4",
-  info:     "glowFlashBlue 1.2s ease 4",
-};
 
 function AlertRow({ alert, onAcknowledge, onResolve, rowRef, isHighlighted }) {
   const meta = LEVEL_META[alert.alert_level] ?? LEVEL_META.info;
@@ -101,9 +152,7 @@ function AlertRow({ alert, onAcknowledge, onResolve, rowRef, isHighlighted }) {
         border: `1px solid ${meta.border}`,
         borderLeft: `4px solid ${meta.color}`,
         opacity: alert.resolved ? 0.55 : 1,
-        animation: isHighlighted
-          ? (GLOW_ANIMATIONS[alert.alert_level] ?? GLOW_ANIMATIONS.info)
-          : undefined,
+        animation: isHighlighted ? (meta.label === "CRITICAL" ? "glowFlashRed 1.2s ease 4" : meta.label === "WARNING" ? "glowFlashOrange 1.2s ease 4" : "glowFlashBlue 1.2s ease 4") : undefined,
       }}
     >
       <div style={styles.alertLevel}>
@@ -116,17 +165,12 @@ function AlertRow({ alert, onAcknowledge, onResolve, rowRef, isHighlighted }) {
       <div style={styles.alertBody}>
         <div style={styles.alertMessage}>{alert.message}</div>
         <div style={styles.alertMeta}>
-          <span>🐝 Hive {alert.hive_id}</span>
-          {alert.sensor_value != null && (
-            <span>📊 {parseFloat(alert.sensor_value).toFixed(1)}</span>
-          )}
+          <span>👤 {alert.user_name}</span>
+          <span>🐝 {alert.hive_name}</span>
+          {alert.sensor_value != null && <span>📊 {parseFloat(alert.sensor_value).toFixed(1)}</span>}
           <span>🕐 {fmtTime(alert.timestamp)}</span>
-          {alert.acknowledged && (
-            <span style={{ color: "#8BC34A" }}>✓ Ack {fmtTime(alert.acknowledged_at)}</span>
-          )}
-          {alert.resolved && (
-            <span style={{ color: "#66BB6A" }}>✅ Resolved {fmtTime(alert.resolved_at)}</span>
-          )}
+          {alert.acknowledged && <span style={{ color: "#8BC34A" }}>✓ Ack {fmtTime(alert.acknowledged_at)}</span>}
+          {alert.resolved && <span style={{ color: "#66BB6A" }}>✅ Resolved {fmtTime(alert.resolved_at)}</span>}
         </div>
       </div>
 
@@ -154,71 +198,71 @@ function AlertRow({ alert, onAcknowledge, onResolve, rowRef, isHighlighted }) {
   );
 }
 
-// ─── Main Page ───────────────────────────────────────────────────────────────
-
-export default function AlertsPage() {
-  const { user } = useAuth();
-  const [hiveIds, setHiveIds] = useState([]);
+export default function AdminAlertsPage() {
   const [alerts, setAlerts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("all");
   const [toasts, setToasts] = useState([]);
+  const [users, setUsers] = useState([]);
+  const [selectedUserIds, setSelectedUserIds] = useState(null);
+  const [ownerByHive, setOwnerByHive] = useState({});
 
   const [searchParams] = useSearchParams();
   const highlightId = searchParams.get("highlight");
   const alertRowRefs = useRef({});
 
-  // ── fetch user's hive IDs ──
   useEffect(() => {
-    if (!user) return;
-    async function loadHiveIds() {
+    async function loadMeta() {
       const { data: userData } = await supabase
         .from("users")
-        .select("user_id")
-        .eq("email", user.email)
-        .single();
-      if (!userData) return;
+        .select("user_id, first_name, last_name, email");
+
+      const safeUsers = userData ?? [];
+      const normalizedUsers = safeUsers.map((u) => ({
+        ...u,
+        name: [u.first_name, u.last_name].filter(Boolean).join(" ") || u.email || `User ${u.user_id}`,
+      }));
+
+      setUsers(normalizedUsers);
+      setSelectedUserIds(normalizedUsers.map((u) => u.user_id));
 
       const { data: hiveData } = await supabase
         .from("beehives")
-        .select("hive_id")
-        .eq("owner_id", userData.user_id);
+        .select("hive_id, owner_id, hive_code");
 
-      setHiveIds((hiveData ?? []).map((h) => h.hive_id));
+      const ownerMap = {};
+      for (const hive of hiveData ?? []) {
+        ownerMap[hive.hive_id] = {
+          owner_id: hive.owner_id,
+          hive_name: hive.hive_code || `Hive ${hive.hive_id}`,
+        };
+      }
+      setOwnerByHive(ownerMap);
     }
-    loadHiveIds();
-  }, [user]);
 
-  // ── fetch alerts ──
+    loadMeta();
+  }, []);
+
   const fetchAlerts = useCallback(async () => {
-    if (hiveIds.length === 0) {
-      setAlerts([]);
-      setLoading(false);
-      return;
-    }
-
     const { data, error } = await supabase
       .from("alerts")
       .select("*")
-      .in("hive_id", hiveIds)
       .order("timestamp", { ascending: false })
       .limit(200);
 
     if (!error && data) setAlerts(data);
     setLoading(false);
-  }, [hiveIds]);
+  }, []);
 
   useEffect(() => {
     setLoading(true);
     fetchAlerts();
   }, [fetchAlerts]);
 
-  // When arriving via highlight link, show all alerts so the target is visible
   useEffect(() => {
     if (highlightId) setFilter("all");
   }, [highlightId]);
 
-  // Scroll to highlighted alert once loading is done
   useEffect(() => {
     if (!highlightId || loading) return;
     const timer = setTimeout(() => {
@@ -228,29 +272,23 @@ export default function AlertsPage() {
     return () => clearTimeout(timer);
   }, [highlightId, loading]);
 
-  // ── realtime ──
   useEffect(() => {
-    if (hiveIds.length === 0) return;
-
     const channel = supabase
-      .channel("alerts-page-live")
+      .channel("admin-alerts-live")
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "alerts" },
         (payload) => {
-          // Only process alerts belonging to this user's hives
-          if (!hiveIds.includes(payload.new?.hive_id ?? payload.old?.hive_id)) return;
-
           if (payload.eventType === "INSERT") {
             const newAlert = payload.new;
-            setAlerts((prev) => [newAlert, ...prev]);
             const toastId = Date.now();
-            setToasts((prev) => [...prev, { ...newAlert, id: toastId }]);
-            setTimeout(
-              () => setToasts((prev) => prev.filter((t) => t.id !== toastId)),
-              6000
-            );
+            setAlerts((prev) => [newAlert, ...prev]);
+            setToasts((prev) => [...prev, { ...newAlert, id: toastId, user_name: "New user" }]);
+            setTimeout(() => {
+              setToasts((prev) => prev.filter((t) => t.id !== toastId));
+            }, 6000);
           }
+
           if (payload.eventType === "UPDATE") {
             setAlerts((prev) =>
               prev.map((a) => (a.alert_id === payload.new.alert_id ? payload.new : a))
@@ -261,9 +299,22 @@ export default function AlertsPage() {
       .subscribe();
 
     return () => supabase.removeChannel(channel);
-  }, [hiveIds]);
+  }, []);
 
-  // ── actions (optimistic updates) ──
+  const enrichedAlerts = useMemo(() => {
+    const userNameMap = Object.fromEntries(users.map((u) => [u.user_id, u.name]));
+
+    return alerts.map((alert) => {
+      const hiveMeta = ownerByHive[alert.hive_id] ?? {};
+      return {
+        ...alert,
+        owner_id: hiveMeta.owner_id ?? null,
+        hive_name: hiveMeta.hive_name ?? `Hive ${alert.hive_id}`,
+        user_name: userNameMap[hiveMeta.owner_id] ?? "Unknown User",
+      };
+    });
+  }, [alerts, ownerByHive, users]);
+
   const acknowledge = async (alertId) => {
     const now = new Date().toISOString();
     setAlerts((prev) =>
@@ -271,6 +322,7 @@ export default function AlertsPage() {
         a.alert_id === alertId ? { ...a, acknowledged: true, acknowledged_at: now } : a
       )
     );
+
     const { error } = await supabase
       .from("alerts")
       .update({ acknowledged: true, acknowledged_at: now })
@@ -278,11 +330,6 @@ export default function AlertsPage() {
 
     if (error) {
       console.error("Acknowledge failed:", error);
-      setAlerts((prev) =>
-        prev.map((a) =>
-          a.alert_id === alertId ? { ...a, acknowledged: false, acknowledged_at: null } : a
-        )
-      );
     }
   };
 
@@ -295,6 +342,7 @@ export default function AlertsPage() {
           : a
       )
     );
+
     const { error } = await supabase
       .from("alerts")
       .update({ resolved: true, resolved_at: now, acknowledged: true, acknowledged_at: now })
@@ -302,39 +350,42 @@ export default function AlertsPage() {
 
     if (error) {
       console.error("Resolve failed:", error);
-      setAlerts((prev) =>
-        prev.map((a) =>
-          a.alert_id === alertId ? { ...a, resolved: false, resolved_at: null } : a
-        )
-      );
     }
   };
 
-  // ── filter ──
-  const filtered = (() => {
-    if (filter === "unresolved") return alerts.filter((a) => !a.resolved);
-    if (filter === "all") return alerts;
-    return alerts.filter((a) => a.alert_level === filter);
-  })();
+  const visibleAlerts = enrichedAlerts.filter((alert) => {
+    if (selectedUserIds !== null && !selectedUserIds.includes(alert.owner_id)) return false;
+    if (filter === "unresolved") return !alert.resolved;
+    if (filter === "all") return true;
+    return alert.alert_level === filter;
+  });
 
-  // ── counts ──
   const counts = {
-    critical: alerts.filter((a) => a.alert_level === "critical" && !a.resolved).length,
-    warning: alerts.filter((a) => a.alert_level === "warning" && !a.resolved).length,
-    info: alerts.filter((a) => a.alert_level === "info" && !a.resolved).length,
+    critical: enrichedAlerts.filter((a) => a.alert_level === "critical" && !a.resolved).length,
+    warning: enrichedAlerts.filter((a) => a.alert_level === "warning" && !a.resolved).length,
+    info: enrichedAlerts.filter((a) => a.alert_level === "info" && !a.resolved).length,
   };
+
+  const userIds = users.map((u) => u.user_id);
+  const userNameMap = Object.fromEntries(users.map((u) => [u.user_id, u.name]));
+
+  function toggleUser(id) {
+    setSelectedUserIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
+  }
 
   return (
     <>
-      <NavBar />
-      <Toast toasts={toasts} onDismiss={(id) => setToasts((p) => p.filter((t) => t.id !== id))} />
+      <Box sx={{ minHeight: "100vh", bgcolor: "#fff9e9" }}>
+        <AdminNavBar />
+      <Toast toasts={toasts} onDismiss={(id) => setToasts((prev) => prev.filter((t) => t.id !== id))} />
 
-      <div style={styles.page}>
-        {/* Header */}
+      <Box sx={styles.page}>
         <div style={styles.header}>
           <div>
             <h1 style={styles.title}>🐝 Alert Center</h1>
-            <p style={styles.subtitle}>Your hives — live monitoring</p>
+            <p style={styles.subtitle}>All users and all hive alerts</p>
           </div>
 
           <div style={styles.summaryRow}>
@@ -357,7 +408,39 @@ export default function AlertsPage() {
           </div>
         </div>
 
-        {/* Filter tabs */}
+        <Paper
+          variant="outlined"
+          sx={{
+            p: { xs: 1.5, md: 2 },
+            mb: 2,
+            border: "2px solid black",
+            borderRadius: "11px",
+            bgcolor: "#fff9e9",
+          }}
+        >
+          <Stack direction="row" flexWrap="wrap" gap={1.5} alignItems="center">
+            <Typography
+              fontFamily="Inter, sans-serif"
+              fontSize={13}
+              fontWeight={600}
+              color="text.secondary"
+            >
+              Filter by user
+            </Typography>
+            {selectedUserIds !== null && (
+              <MultiSelectFilter
+                label="Users"
+                options={userIds}
+                selected={selectedUserIds}
+                onToggle={toggleUser}
+                onSelectAll={() => setSelectedUserIds([...userIds])}
+                onClearAll={() => setSelectedUserIds([])}
+                getLabel={(id) => userNameMap[id] ?? `User ${id}`}
+              />
+            )}
+          </Stack>
+        </Paper>
+
         <div style={styles.filterRow}>
           {["all", "unresolved", "critical", "warning", "info"].map((f) => (
             <button
@@ -370,16 +453,15 @@ export default function AlertsPage() {
           ))}
         </div>
 
-        {/* Alert list */}
         <div style={styles.list}>
           {loading ? (
             <div style={styles.empty}>Loading alerts…</div>
-          ) : filtered.length === 0 ? (
+          ) : visibleAlerts.length === 0 ? (
             <div style={styles.empty}>
               {filter === "unresolved" ? "✅ All clear — no unresolved alerts!" : "No alerts found."}
             </div>
           ) : (
-            filtered.map((alert) => (
+            visibleAlerts.map((alert) => (
               <AlertRow
                 key={alert.alert_id}
                 alert={alert}
@@ -393,14 +475,15 @@ export default function AlertsPage() {
             ))
           )}
         </div>
-      </div>
+      </Box>
 
       <Footer />
+      </Box>
 
       <style>{`
         @keyframes slideIn {
           from { transform: translateX(120%); opacity: 0; }
-          to   { transform: translateX(0);   opacity: 1; }
+          to   { transform: translateX(0); opacity: 1; }
         }
         @keyframes glowFlashRed {
           0%, 100% { box-shadow: none; }
@@ -419,11 +502,9 @@ export default function AlertsPage() {
   );
 }
 
-// ─── Styles ──────────────────────────────────────────────────────────────────
-
 const styles = {
   page: {
-    maxWidth: 900,
+    maxWidth: 1000,
     margin: "0 auto",
     padding: "24px 16px 40px",
     fontFamily: "inherit",

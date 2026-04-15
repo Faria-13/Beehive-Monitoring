@@ -5,19 +5,21 @@
   --outline: #1F0300;
   --accent-red: #FE5C05;
   --accent-gold: #FE9805;
-  --caption: #C9C7BA;
+  --caption: #888880;
 }
 
 html, body, #root {
+  margin: 0;
+  padding: 0;
   height: 100%;
+  width: 100%;
 }
 
 body {
   margin: 0;
-  background: var(--bg);
+  padding: 0;              
+  background: var(--nav);  
   color: var(--text);
-  padding: 10px 5%;
-  
 }
 
 .outlined {
