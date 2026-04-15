@@ -3,6 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { supabase } from "../createClient";
 import { useAuth } from "../context/AuthContext";
 import { NavBar } from "../components/HiveOverviewUI";
+import Footer from "../components/Footer";
 import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
 import { DatePicker } from "@mui/x-date-pickers/DatePicker";
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
@@ -436,14 +437,14 @@ export default function DatabasePage() {
                 value={startDate}
                 onChange={(v) => v?.isValid() && setStartDate(v)}
                 disableFuture
-                slotProps={{ textField: { size: "small", sx: { width: 150 } } }}
+                slotProps={{ textField: { size: "small", sx: { width: 175 } } }}
               />
               <DatePicker
                 label="To"
                 value={endDate}
                 onChange={(v) => v?.isValid() && setEndDate(v)}
                 disableFuture
-                slotProps={{ textField: { size: "small", sx: { width: 150 } } }}
+                slotProps={{ textField: { size: "small", sx: { width: 175 } } }}
               />
             </LocalizationProvider>
 
@@ -622,6 +623,7 @@ export default function DatabasePage() {
           </TableContainer>
         </Paper>
       </Box>
+      <Footer />
     </Box>
   );
 }

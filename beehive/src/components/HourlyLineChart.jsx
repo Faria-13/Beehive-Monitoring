@@ -24,8 +24,8 @@ function StatBox({ label, value, unit }) {
     <Box
       sx={{
         flex: 1,
-        border: "1.5px solid var(--outline)",
-        borderRadius: 0.5,
+        border: "2px solid var(--outline)",
+        borderRadius: "14px",
         px: 2,
         py: 1.25,
         textAlign: "center",
@@ -165,7 +165,7 @@ export default function HourlyLineChart({
         height: "100%",
       }}
     >
-      <CardContent sx={{ backgroundColor: "var(--bg)" }}>
+      <CardContent sx={{ backgroundColor: "var(--bg)", pt: 3, pb: 2, "&:last-child": { pb: 2 } }}>
         {/* ── Card title ── */}
         <Typography variant="h3" align="center" sx={{ mb: 1.5 }}>
           24 Hour View
@@ -216,8 +216,21 @@ export default function HourlyLineChart({
 
         {readings === null ? (
           <Typography>Loading…</Typography>
-        ) : !isReady ? (
-          <Typography>No readings in the last 24 hours.</Typography>
+        ) : !isReady || !chartData.yData.some((v) => v !== null) ? (
+          <Box
+            sx={{
+              height: 300,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              border: "2px solid var(--outline)",
+              borderRadius: "14px",
+            }}
+          >
+            <Typography align="center" color="error">
+              error: no available data for {sensorType} within the last 24 hours
+            </Typography>
+          </Box>
         ) : (
           <div className="chartFrame">
             <LineChart

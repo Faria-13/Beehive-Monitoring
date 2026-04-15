@@ -28,8 +28,8 @@ function StatBox({ label, value, unit }) {
     <Box
       sx={{
         flex: 1,
-        border: "1.5px solid var(--outline)",
-        borderRadius: 0.5,
+        border: "2px solid var(--outline)",
+        borderRadius: "14px",
         px: 2,
         py: 1.25,
         textAlign: "center",
@@ -159,6 +159,7 @@ export default function SensorLineChartControlled({
         if (!cancelled) setReadings(data);
 
         if (showLocalWeather) {
+          // Weather data is fetched regardless; effectiveShowWeather controls rendering
           const weatherData = await fetchWeatherByRange(startISO, endISO);
           if (!cancelled) setWeatherReadings(weatherData);
         } else {
@@ -214,13 +215,14 @@ export default function SensorLineChartControlled({
     const unit = readings.find((r) => r.unit)?.unit ?? "?";
 
     let weatherYData = dayKeys.map(() => null);
-    if (showLocalWeather && weatherReadings) {
+    const showWeatherInChart = showLocalWeather && sensorType.toLowerCase().includes("temperature");
+    if (showWeatherInChart && weatherReadings) {
       const weatherMap = new Map(weatherReadings.map((w) => [w.day, w.avg_temp]));
       weatherYData = dayKeys.map((k) => weatherMap.get(k) ?? null);
     }
 
     return { xData, yData, weatherYData, unit };
-  }, [readings, weatherReadings, startDate, endDate, showLocalWeather]);
+  }, [readings, weatherReadings, startDate, endDate, showLocalWeather, sensorType]);
 
   // ── stats from raw readings ───────────────────────────────────────────────
   const stats = useMemo(() => {
@@ -233,11 +235,15 @@ export default function SensorLineChartControlled({
     return { high, low, avg };
   }, [readings]);
 
+  // Only show weather overlay for temperature sensors
+  const isTemp = sensorType.toLowerCase().includes("temperature");
+  const effectiveShowWeather = showLocalWeather && isTemp;
+
   const isReady =
     chartData &&
     chartData.xData.length > 0 &&
     chartData.yData.length === chartData.xData.length &&
-    (!showLocalWeather ||
+    (!effectiveShowWeather ||
       (chartData.weatherYData && chartData.weatherYData.length === chartData.xData.length));
 
   const calendarValue = editingDate === "start" ? startDate : endDate;
@@ -252,7 +258,7 @@ export default function SensorLineChartControlled({
         height: "100%",
       }}
     >
-      <CardContent sx={{ backgroundColor: "var(--bg)" }}>
+      <CardContent sx={{ backgroundColor: "var(--bg)", pt: 3, pb: 2, "&:last-child": { pb: 2 } }}>
 
         {/* ── Card title — dates are clickable/underlined ── */}
         <Typography variant="h3" align="center" sx={{ mb: 1.5 }}>
@@ -363,7 +369,7 @@ export default function SensorLineChartControlled({
                       value == null ? "NaN" : value.toFixed(2),
                     color: "#FE9805",
                   },
-                  ...(showLocalWeather
+                  ...(effectiveShowWeather
                     ? [
                         {
                           id: "weather",

@@ -4,14 +4,21 @@ import { supabase } from "../createClient";
 import Box from "@mui/material/Box";
 import Card from "@mui/material/Card";
 import CardContent from "@mui/material/CardContent";
-import Typography from "@mui/material/Typography";
+import Collapse from "@mui/material/Collapse";
+import IconButton from "@mui/material/IconButton";
 import Stack from "@mui/material/Stack";
+import Typography from "@mui/material/Typography";
+import useMediaQuery from "@mui/material/useMediaQuery";
+import { useTheme } from "@mui/material/styles";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 
 import { NavBar } from "../components/HiveOverviewUI";
 import SensorDashboardRow from "../components/SensorDashboardRow";
 import LiveReadingsCard from "../components/LiveReadingsCard";
 import HourlyLineChart from "../components/HourlyLineChart";
 import WeatherWidget from "../components/WeatherWidget";
+import HiveStatusCard from "../components/HiveStatusCard";
+import Footer from "../components/Footer";
 
 // ── shared section header ─────────────────────────────────────────────────────
 function SectionHeader({ children }) {
@@ -25,27 +32,49 @@ function SectionHeader({ children }) {
   );
 }
 
-// ── placeholder card for future content ──────────────────────────────────────
-function PlaceholderCard({ label }) {
+// ── collapsible section for mobile ───────────────────────────────────────────
+function CollapsibleSection({ title, defaultOpen = false, children }) {
+  const [open, setOpen] = useState(defaultOpen);
+
   return (
-    <Card
-      sx={{
-        backgroundColor: "var(--bg)",
-        border: "2px dashed var(--outline)",
-        boxShadow: "none",
-        flex: 1,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        minHeight: 120,
-      }}
-    >
-      <CardContent>
-        <Typography variant="h3" align="center">
-          {label}
+    <Box sx={{ border: "2px solid var(--outline)", borderRadius: 1, overflow: "hidden" }}>
+      {/* Header row */}
+      <Box
+        onClick={() => setOpen((v) => !v)}
+        sx={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          px: 2,
+          py: 1.5,
+          cursor: "pointer",
+          backgroundColor: "var(--bg)",
+          userSelect: "none",
+        }}
+      >
+        <Typography variant="h5" sx={{ fontWeight: 700, color: "text.primary" }}>
+          {title}
         </Typography>
-      </CardContent>
-    </Card>
+        <IconButton
+          size="small"
+          disableRipple
+          sx={{
+            transform: open ? "rotate(180deg)" : "rotate(0deg)",
+            transition: "transform 0.25s",
+            color: "text.primary",
+          }}
+        >
+          <ExpandMoreIcon />
+        </IconButton>
+      </Box>
+
+      {/* Collapsible content */}
+      <Collapse in={open}>
+        <Box sx={{ p: 2, backgroundColor: "var(--bg)" }}>
+          {children}
+        </Box>
+      </Collapse>
+    </Box>
   );
 }
 
@@ -53,6 +82,9 @@ function PlaceholderCard({ label }) {
 export default function HiveDashboard() {
   const { hiveId } = useParams();
   const navigate   = useNavigate();
+  const theme      = useTheme();
+  const isMobile   = useMediaQuery(theme.breakpoints.down("sm"));   // < 600px
+  const isTablet   = useMediaQuery(theme.breakpoints.between("sm", "md")); // 600–899px
 
   const [hive,              setHive]              = useState(null);
   const [sensors,           setSensors]           = useState([]);
@@ -174,29 +206,121 @@ export default function HiveDashboard() {
     );
   }
 
-  // ── main dashboard ────────────────────────────────────────────────────────
+  const hiveName = hive.hive_code || `Hive ${hive.hive_id}`;
+
+  // ── mobile layout ─────────────────────────────────────────────────────────
+  if (isMobile) {
+    return (
+      <>
+        <NavBar centerTitle={hiveName} onDatabaseClick={() => navigate(`/database?hive=${hiveId}`)} />
+        <Box sx={{ px: 2, pt: 1.5, pb: 2, maxWidth: 600, mx: "auto" }}>
+
+          {/* HiveStatusCard shown first on mobile */}
+          <Box sx={{ mb: 2 }}>
+            <HiveStatusCard hiveId={Number(hiveId)} />
+          </Box>
+
+          {/* Collapsible: Your Hive Live */}
+          <Box sx={{ mb: 2 }}>
+            <CollapsibleSection title="Your Hive Live">
+              <Stack spacing={2}>
+                <LiveReadingsCard sensorIds={sensorIds} sensorOptions={sensorOptions} />
+                <HourlyLineChart
+                  sensorId={liveActiveSensorId}
+                  sensorOptions={sensorOptions}
+                  onSensorChange={setLiveActiveSensorId}
+                />
+                <WeatherWidget />
+              </Stack>
+            </CollapsibleSection>
+          </Box>
+
+          {/* Collapsible: 2 Week View */}
+          <Box sx={{ mb: 2 }}>
+            <CollapsibleSection title="2 Week View">
+              <SensorDashboardRow
+                selectedSensorId={selectedSensorId}
+                onSelectedSensorIdChange={setSelectedSensorId}
+                sensorIds={sensorIds}
+                sensorOptions={sensorOptions}
+                showLocalWeather={true}
+              />
+            </CollapsibleSection>
+          </Box>
+
+        </Box>
+        <Footer />
+      </>
+    );
+  }
+
+  // ── tablet layout (sm: 600–899px) ────────────────────────────────────────
+  if (isTablet) {
+    return (
+      <>
+        <NavBar centerTitle={hiveName} onDatabaseClick={() => navigate(`/database?hive=${hiveId}`)} />
+        <Box sx={{ px: 3, pt: 2, pb: 2, mx: "auto" }}>
+
+          <SectionHeader>Your Hive Live</SectionHeader>
+
+          <Stack spacing={2} sx={{ mb: 4 }}>
+            {/* Charts + readings stacked full-width */}
+            <LiveReadingsCard sensorIds={sensorIds} sensorOptions={sensorOptions} />
+            <HourlyLineChart
+              sensorId={liveActiveSensorId}
+              sensorOptions={sensorOptions}
+              onSensorChange={setLiveActiveSensorId}
+            />
+            {/* Weather and HiveStatus side by side */}
+            <Stack direction="row" spacing={2} alignItems="stretch">
+              <Box sx={{ flex: 1 }}>
+                <WeatherWidget />
+              </Box>
+              <Box sx={{ flex: 1 }}>
+                <HiveStatusCard hiveId={Number(hiveId)} />
+              </Box>
+            </Stack>
+          </Stack>
+
+          <SectionHeader>2 Week View</SectionHeader>
+          <SensorDashboardRow
+            selectedSensorId={selectedSensorId}
+            onSelectedSensorIdChange={setSelectedSensorId}
+            sensorIds={sensorIds}
+            sensorOptions={sensorOptions}
+            showLocalWeather={true}
+          />
+
+          <Box sx={{ pb: "50px" }} />
+        </Box>
+        <Footer />
+      </>
+    );
+  }
+
+  // ── desktop layout (md+) ──────────────────────────────────────────────────
   return (
     <>
-      <NavBar onDatabaseClick={() => navigate(`/database?hive=${hiveId}`)} />
+      <NavBar centerTitle={hiveName} onDatabaseClick={() => navigate(`/database?hive=${hiveId}`)} />
 
-      <Box sx={{ px: "50px", pt: "50px", pb: 2, maxWidth: 1400, mx: "auto" }}>
+      <Box sx={{ px: "50px", pt: "24px", pb: 2, maxWidth: 1400, mx: "auto" }}>
 
         {/* ── Row 1: Your Hive Live ── */}
         <SectionHeader>Your Hive Live</SectionHeader>
 
         <Stack
-          direction={{ xs: "column", md: "row" }}
+          direction="row"
           spacing={2}
           alignItems="stretch"
           sx={{ mb: 4 }}
         >
           {/* Narrow: Current Sensor Readings */}
-          <Box sx={{ width: { md: "25%" }, flexShrink: 0, minWidth: 220 }}>
+          <Box sx={{ width: "25%", flexShrink: 0, minWidth: 220 }}>
             <LiveReadingsCard sensorIds={sensorIds} sensorOptions={sensorOptions} />
           </Box>
 
           {/* Middle: 24-Hour Chart */}
-          <Box sx={{ width: { md: "50%" }, minWidth: 320 }}>
+          <Box sx={{ width: "50%", minWidth: 320 }}>
             <HourlyLineChart
               sensorId={liveActiveSensorId}
               sensorOptions={sensorOptions}
@@ -204,15 +328,21 @@ export default function HiveDashboard() {
             />
           </Box>
 
-          {/* Right column: weather + placeholder */}
-          <Stack
-            direction="column"
-            spacing={2}
-            sx={{ width: { md: "25%" }, flexShrink: 0, minWidth: 200 }}
+          {/* Right column: weather + hive status */}
+          <Box
+            sx={{
+              width: "25%",
+              flexShrink: 0,
+              minWidth: 200,
+              alignSelf: "stretch",
+              display: "grid",
+              gridTemplateRows: "270px 1fr",
+              gap: 2,
+            }}
           >
             <WeatherWidget />
-            <PlaceholderCard label="Current Status of Hive" />
-          </Stack>
+            <HiveStatusCard hiveId={Number(hiveId)} />
+          </Box>
         </Stack>
 
         {/* ── Row 2: 2 Week View ── */}
@@ -228,6 +358,7 @@ export default function HiveDashboard() {
 
         <Box sx={{ pb: "50px" }} />
       </Box>
+      <Footer />
     </>
   );
 }

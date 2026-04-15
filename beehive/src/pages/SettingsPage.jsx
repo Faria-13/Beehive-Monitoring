@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { supabase } from "../createClient";
 import { useAuth } from "../context/AuthContext";
 import { NavBar } from "../components/HiveOverviewUI";
+import Footer from "../components/Footer";
 import {
   Alert,
   Box,
@@ -593,6 +594,7 @@ export default function SettingsPage() {
         )}
 
       </Box>
+      <Footer />
     </Box>
   );
 }

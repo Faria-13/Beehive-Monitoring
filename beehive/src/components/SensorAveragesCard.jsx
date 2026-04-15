@@ -139,6 +139,7 @@ export default function SensorAveragesCard({
           height: "100%",
           display: "flex",
           flexDirection: "column",
+          pt: 3,
           px: "25px",
         }}
       >

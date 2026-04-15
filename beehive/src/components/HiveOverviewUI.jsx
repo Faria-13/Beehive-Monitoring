@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "../createClient";
 import {
   AppBar,
@@ -31,6 +31,7 @@ import ArrowRightIcon from "@mui/icons-material/ArrowRight";
 import MenuIcon from "@mui/icons-material/Menu";
 import DubaiLogo from "../assets/DubaiLogo.png";
 import overviewBg from "../assets/overviewBackground.png";
+import Footer from "./Footer";
 
 function HiveAvatar({ hive, onEditClick }) {
   const [hovered, setHovered] = useState(false);
@@ -258,10 +259,12 @@ function HiveEditDialog({ hive, open, onClose, onSaved }) {
 
 export function NavBar({
   appTitle = "DUBAI Hive Monitoring",
+  centerTitle,
   onDatabaseClick,
   onSettingsClick,
 }) {
   const navigate = useNavigate();
+  const location = useLocation();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
   const [hamburgerAnchor, setHamburgerAnchor] = useState(null);
@@ -272,36 +275,49 @@ export function NavBar({
   }
 
   const navItems = [
-    { label: "Alerts", onClick: () => navigate("/alerts") },
-    { label: "Database", onClick: onDatabaseClick ?? (() => navigate("/database")) },
-    { label: "Settings", onClick: onSettingsClick ?? (() => navigate("/settings")) },
-    { label: "Logout", onClick: handleLogout },
+    { label: "Alerts",   onClick: () => navigate("/alerts"),   path: "/alerts"   },
+    { label: "Database", onClick: onDatabaseClick ?? (() => navigate("/database")), path: "/database" },
+    { label: "Settings", onClick: onSettingsClick ?? (() => navigate("/settings")), path: "/settings" },
+    { label: "Logout",   onClick: handleLogout,                path: "/login"    },
   ];
 
+  const isActive = (path) => path && location.pathname === path;
+
   return (
-    <AppBar position="static" elevation={4} sx={{ bgcolor: "#fbc139", color: "black" }}>
-      <Toolbar sx={{ px: { xs: 1.5, sm: 3 } }}>
-        <Box
-          component="img"
-          src={DubaiLogo}
-          alt="Dubai Logo"
-          sx={{
-            width: { xs: 40, sm: 60 },
-            height: { xs: 40, sm: 60 },
-            objectFit: "contain",
-            flexShrink: 0,
-            mr: 1.5,
-          }}
-        />
+    <AppBar position="sticky" elevation={4} sx={{ top: 0, zIndex: 1100, bgcolor: "#fbc139", color: "black" }}>
+      <Toolbar sx={{ px: { xs: 2, sm: 7 }, position: "relative" }}>
+        {centerTitle && (
+          <Typography
+            fontFamily="Poppins, sans-serif"
+            fontWeight={700}
+            sx={{
+              position: "absolute",
+              left: "50%",
+              transform: "translateX(-50%)",
+              fontSize: { xs: 16, sm: 20, md: 22 },
+              color: "#fff",
+              pointerEvents: "none",
+              userSelect: "none",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {centerTitle}
+          </Typography>
+        )}
+
+        {/* Brand link */}
         <Typography
-          variant="h6"
+          component={Link}
+          to="/hives"
           fontFamily="Poppins, sans-serif"
           fontWeight={700}
-          color="white"
           sx={{
-            textDecoration: "underline",
             flexGrow: 1,
-            fontSize: { xs: 14, sm: 18, md: 20 },
+            fontSize: { xs: 14, sm: 16, md: 18 },
+            color: isActive("/hives") ? "#fff" : "#000",
+            textDecoration: isActive("/hives") ? "underline" : "none",
+            textUnderlineOffset: "4px",
+            "&:hover": { textDecoration: "underline", opacity: 0.9 },
           }}
         >
           {appTitle}
@@ -320,11 +336,15 @@ export function NavBar({
               open={Boolean(hamburgerAnchor)}
               onClose={() => setHamburgerAnchor(null)}
             >
-              {navItems.map(({ label, onClick }) => (
+              {navItems.map(({ label, onClick, path }) => (
                 <MenuItem
                   key={label}
                   onClick={() => { setHamburgerAnchor(null); onClick?.(); }}
-                  sx={{ fontFamily: "Inter, sans-serif", fontWeight: 500 }}
+                  sx={{
+                    fontFamily: "Inter, sans-serif",
+                    fontWeight: isActive(path) ? 700 : 500,
+                    color: isActive(path) ? "#FE9805" : "inherit",
+                  }}
                 >
                   {label}
                 </MenuItem>
@@ -332,20 +352,29 @@ export function NavBar({
             </Menu>
           </>
         ) : (
-          <Stack direction="row" spacing={{ sm: 2, md: 4 }}>
-            {navItems.map(({ label, onClick }) => (
-              <Typography
-                key={label}
-                component="span"
-                fontFamily="Inter, sans-serif"
-                fontWeight={500}
-                fontSize={{ sm: 16, md: 20 }}
-                sx={{ cursor: "pointer", "&:hover": { opacity: 0.75 } }}
-                onClick={onClick}
-              >
-                {label}
-              </Typography>
-            ))}
+          <Stack direction="row" spacing={{ sm: 3, md: 4 }}>
+            {navItems.map(({ label, onClick, path }) => {
+              const active = isActive(path);
+              return (
+                <Typography
+                  key={label}
+                  component="span"
+                  fontFamily="Inter, sans-serif"
+                  fontWeight={active ? 700 : 400}
+                  fontSize={14}
+                  sx={{
+                    cursor: "pointer",
+                    color: active ? "#fff" : "#000",
+                    textDecoration: active ? "underline" : "none",
+                    textUnderlineOffset: "4px",
+                    "&:hover": { color: "#fff", textDecoration: "underline" },
+                  }}
+                  onClick={onClick}
+                >
+                  {label}
+                </Typography>
+              );
+            })}
           </Stack>
         )}
       </Toolbar>
@@ -529,8 +558,8 @@ export default function HiveOverviewUI({
       sx={{
         minHeight: "100vh",
         bgcolor: "#fff9e9",
-        backgroundImage: `url(${overviewBg})`,
-        backgroundSize: "cover",
+        backgroundImage: { xs: "none", sm: "none", md: `url(${overviewBg})` },
+        backgroundSize: { md: "cover" },
         backgroundPosition: "center",
         backgroundAttachment: "fixed",
         backgroundRepeat: "no-repeat",
@@ -727,6 +756,10 @@ export default function HiveOverviewUI({
         onClose={() => setEditingHive(null)}
         onSaved={() => { setEditingHive(null); onHiveUpdated?.(); }}
       />
+
+      <Box sx={{ pt: 6 }}>
+        <Footer />
+      </Box>
     </Box>
   );
 }

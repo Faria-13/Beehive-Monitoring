@@ -85,11 +85,14 @@ export default function LiveReadingsCard({ sensorIds = [], sensorOptions = [] })
           height: "100%",
           display: "flex",
           flexDirection: "column",
+          pt: 3,
+          px: "25px",
         }}
       >
         <Typography variant="h3" align="center" sx={{ mb: 4 }}>
           Current Sensor Readings
         </Typography>
+
 
         {error && (
           <Typography color="error" sx={{ mb: 2 }}>
@@ -102,7 +105,7 @@ export default function LiveReadingsCard({ sensorIds = [], sensorOptions = [] })
         ) : rows.length === 0 ? (
           <Typography>No sensors configured.</Typography>
         ) : (
-          <Stack sx={{ flex: 1, justifyContent: "space-between" }}>
+          <Stack sx={{ flex: 1, justifyContent: "space-between", pb: "20px" }}>
             {rows.map((r) => (
               <Stack
                 key={r.id}

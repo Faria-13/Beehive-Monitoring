@@ -109,10 +109,10 @@ export default function WeatherWidget() {
         backgroundColor: "var(--bg)",
         border: "2px solid var(--outline)",
         boxShadow: "none",
-        height: "100%",
+        height: 270,
       }}
     >
-      <CardContent sx={{ p: 2, "&:last-child": { pb: 2 } }}>
+      <CardContent sx={{ p: 2, pt: 3, "&:last-child": { pb: 2 } }}>
 
         {/* ── Card header ── */}
         <Typography variant="h3" align="center" sx={{ mb: 1.5 }}>
@@ -124,7 +124,7 @@ export default function WeatherWidget() {
 
           {/* Left: location label + big temperature */}
           <Box>
-            <Typography variant="body2" sx={{ fontWeight: 700, mb: 0.5 }}>
+            <Typography variant="caption" sx={{ fontWeight: 700, mb: 0.5, fontSize: "0.7rem" }}>
               {LOCATION}
             </Typography>
             <Typography
@@ -163,11 +163,11 @@ export default function WeatherWidget() {
         <Stack direction="row" justifyContent="space-around">
           {forecast.map((f) => (
             <Stack key={f.day} alignItems="center" spacing={0.5}>
-              <Typography variant="caption" sx={{ fontWeight: 600, color: "text.secondary" }}>
+              <Typography sx={{ fontWeight: 600, color: "text.secondary", fontSize: "0.65rem" }}>
                 {f.day}
               </Typography>
               <Box sx={{ fontSize: "1.6rem", lineHeight: 1 }}>{f.icon}</Box>
-              <Typography variant="body2" sx={{ fontWeight: 600 }}>{f.hi}°</Typography>
+              <Typography variant="body2" sx={{ fontWeight: 400 }}>{f.hi}°</Typography>
               <Typography variant="caption" color="text.secondary">{f.lo}°</Typography>
             </Stack>
           ))}

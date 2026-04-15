@@ -1,7 +1,9 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
+import { useSearchParams } from "react-router-dom";
 import { supabase } from "../createClient";
 import { useAuth } from "../context/AuthContext";
 import { NavBar } from "../components/HiveOverviewUI";
+import Footer from "../components/Footer";
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -74,7 +76,13 @@ function Toast({ toasts, onDismiss }) {
 
 // ─── Alert row ──────────────────────────────────────────────────────────────
 
-function AlertRow({ alert, onAcknowledge, onResolve }) {
+const GLOW_ANIMATIONS = {
+  critical: "glowFlashRed 1.2s ease 4",
+  warning:  "glowFlashOrange 1.2s ease 4",
+  info:     "glowFlashBlue 1.2s ease 4",
+};
+
+function AlertRow({ alert, onAcknowledge, onResolve, rowRef, isHighlighted }) {
   const meta = LEVEL_META[alert.alert_level] ?? LEVEL_META.info;
   const [busy, setBusy] = useState(false);
 
@@ -86,12 +94,16 @@ function AlertRow({ alert, onAcknowledge, onResolve }) {
 
   return (
     <div
+      ref={rowRef}
       style={{
         ...styles.alertRow,
         background: meta.bg,
         border: `1px solid ${meta.border}`,
         borderLeft: `4px solid ${meta.color}`,
         opacity: alert.resolved ? 0.55 : 1,
+        animation: isHighlighted
+          ? (GLOW_ANIMATIONS[alert.alert_level] ?? GLOW_ANIMATIONS.info)
+          : undefined,
       }}
     >
       <div style={styles.alertLevel}>
@@ -152,6 +164,10 @@ export default function AlertsPage() {
   const [filter, setFilter] = useState("all");
   const [toasts, setToasts] = useState([]);
 
+  const [searchParams] = useSearchParams();
+  const highlightId = searchParams.get("highlight");
+  const alertRowRefs = useRef({});
+
   // ── fetch user's hive IDs ──
   useEffect(() => {
     if (!user) return;
@@ -196,6 +212,21 @@ export default function AlertsPage() {
     setLoading(true);
     fetchAlerts();
   }, [fetchAlerts]);
+
+  // When arriving via highlight link, show all alerts so the target is visible
+  useEffect(() => {
+    if (highlightId) setFilter("all");
+  }, [highlightId]);
+
+  // Scroll to highlighted alert once loading is done
+  useEffect(() => {
+    if (!highlightId || loading) return;
+    const timer = setTimeout(() => {
+      const el = alertRowRefs.current[highlightId];
+      if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 150);
+    return () => clearTimeout(timer);
+  }, [highlightId, loading]);
 
   // ── realtime ──
   useEffect(() => {
@@ -352,6 +383,10 @@ export default function AlertsPage() {
               <AlertRow
                 key={alert.alert_id}
                 alert={alert}
+                rowRef={(el) => {
+                  if (el) alertRowRefs.current[String(alert.alert_id)] = el;
+                }}
+                isHighlighted={String(alert.alert_id) === highlightId}
                 onAcknowledge={() => acknowledge(alert.alert_id)}
                 onResolve={() => resolve(alert.alert_id)}
               />
@@ -360,10 +395,24 @@ export default function AlertsPage() {
         </div>
       </div>
 
+      <Footer />
+
       <style>{`
         @keyframes slideIn {
           from { transform: translateX(120%); opacity: 0; }
           to   { transform: translateX(0);   opacity: 1; }
+        }
+        @keyframes glowFlashRed {
+          0%, 100% { box-shadow: none; }
+          50% { box-shadow: 0 0 20px 6px rgba(255,77,77,0.7); }
+        }
+        @keyframes glowFlashOrange {
+          0%, 100% { box-shadow: none; }
+          50% { box-shadow: 0 0 20px 6px rgba(254,152,5,0.7); }
+        }
+        @keyframes glowFlashBlue {
+          0%, 100% { box-shadow: none; }
+          50% { box-shadow: 0 0 20px 6px rgba(77,166,255,0.7); }
         }
       `}</style>
     </>
