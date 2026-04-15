@@ -10,10 +10,12 @@ import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
 
 import { fetchSensorReadingsByRange, fetchSensorMeta } from "../api/sensorReadings";
+import { fetchHourlyWeatherByRange } from "../api/weather";
 
 dayjs.extend(utc);
 
 const POLL_INTERVAL_MS = 5 * 60_000; // refresh every 5 minutes
+const WEATHER_POLL_INTERVAL_MS = 60 * 60_000; // refresh local weather every hour
 
 // ── small labelled stat box ───────────────────────────────────────────────────
 function StatBox({ label, value, unit }) {
@@ -52,6 +54,7 @@ export default function HourlyLineChart({
   onSensorChange,
 }) {
   const [readings, setReadings] = useState(null); // null = loading
+  const [weatherReadings, setWeatherReadings] = useState(null);
   const [error, setError] = useState(null);
   const [sensorType, setSensorType] = useState("Sensor");
 
@@ -69,6 +72,8 @@ export default function HourlyLineChart({
     if (sensorId) loadMeta();
     return () => { cancelled = true; };
   }, [sensorId]);
+
+  const isTemp = sensorType.toLowerCase().includes("temperature");
 
   // Load 24-hour readings + polling
   useEffect(() => {
@@ -100,10 +105,38 @@ export default function HourlyLineChart({
     };
   }, [sensorId]);
 
+  // Load local weather on a slower cadence than hive sensor data
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadWeather() {
+      try {
+        if (!isTemp) {
+          setWeatherReadings(null);
+          return;
+        }
+
+        const endISO = dayjs().toISOString();
+        const startISO = dayjs().subtract(24, "hour").toISOString();
+        const data = await fetchHourlyWeatherByRange(startISO, endISO);
+        if (!cancelled) setWeatherReadings(data);
+      } catch {
+        if (!cancelled) setWeatherReadings([]);
+      }
+    }
+
+    loadWeather();
+    const interval = setInterval(loadWeather, WEATHER_POLL_INTERVAL_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [isTemp]);
+
   // Build hourly-bucketed chart data
   const chartData = useMemo(() => {
     if (readings === null) return null;
-    if (readings.length === 0) return { xData: [], yData: [], unit: "" };
+    if (readings.length === 0) return { xData: [], yData: [], weatherYData: [], unit: "" };
 
     const now = dayjs();
     const hourKeys = [];
@@ -131,8 +164,23 @@ export default function HourlyLineChart({
 
     const unit = readings.find((r) => r.unit)?.unit ?? "";
 
-    return { xData, yData, unit };
-  }, [readings]);
+    let weatherYData = hourKeys.map(() => null);
+    if (isTemp && weatherReadings) {
+      const weatherMap = new Map(
+        weatherReadings.map((reading) => [
+          dayjs(reading.timestamp).startOf("hour").format("YYYY-MM-DD HH"),
+          Number(reading.temperature),
+        ])
+      );
+
+      weatherYData = hourKeys.map((key) => {
+        const value = weatherMap.get(key);
+        return Number.isFinite(value) ? value : null;
+      });
+    }
+
+    return { xData, yData, weatherYData, unit };
+  }, [isTemp, readings, weatherReadings]);
 
   // Compute high / low / avg from raw readings
   const stats = useMemo(() => {
@@ -154,7 +202,10 @@ export default function HourlyLineChart({
   const unit = chartData?.unit ?? "";
 
   const isReady =
-    chartData && chartData.xData.length > 0 && chartData.yData.length === chartData.xData.length;
+    chartData &&
+    chartData.xData.length > 0 &&
+    chartData.yData.length === chartData.xData.length &&
+    (!isTemp || chartData.weatherYData.length === chartData.xData.length);
 
   return (
     <Card
@@ -264,6 +315,18 @@ export default function HourlyLineChart({
                     value == null ? "No data" : value.toFixed(2),
                   color: "#FE9805",
                 },
+                ...(isTemp
+                  ? [
+                      {
+                        id: "weather-hourly",
+                        data: chartData.weatherYData,
+                        label: "Local Temperature (°F)",
+                        valueFormatter: (value) =>
+                          value == null ? "No data" : value.toFixed(2),
+                        color: "#FE5C05",
+                      },
+                    ]
+                  : []),
               ]}
               height={300}
             />

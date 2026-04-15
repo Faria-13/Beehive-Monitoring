@@ -7,12 +7,24 @@ import AdminOverview from "./pages/AdminOverview";
 import AlertsPage from "./pages/AlertsPage";
 import DatabasePage from "./pages/DatabasePage";
 import SettingsPage from "./pages/SettingsPage";
+import RequestAccess from "./pages/RequestAccess";
+import SignupSubmitted from "./pages/SignupSubmitted";
+import AccountPending from "./pages/AccountPending";
+import AccountReady from "./pages/AccountReady";
+import AdminPendingRequests from "./pages/AdminPendingRequests";
+import AdminRequestReview from "./pages/AdminRequestReview";
+import AdminDatabasePage from "./pages/AdminDatabasePage";
+import AdminAlertsPage from "./pages/AdminAlertsPage";
 
 function App() {
   return (
     <div>
       <Routes>
         <Route path="/login" element={<Login />} />
+        <Route path="/request-access" element={<RequestAccess />} />
+        <Route path="/signup-submitted" element={<SignupSubmitted />} />
+        <Route path="/account-pending" element={<AccountPending />} />
+        <Route path="/account-ready" element={<AccountReady />} />
 
         <Route
           path="/hives"
@@ -28,6 +40,42 @@ function App() {
           element={
             <ProtectedRoute>
               <AdminOverview />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/admin/requests"
+          element={
+            <ProtectedRoute>
+              <AdminPendingRequests />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/admin/requests/:requestId"
+          element={
+            <ProtectedRoute>
+              <AdminRequestReview />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/admin/database"
+          element={
+            <ProtectedRoute>
+              <AdminDatabasePage />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/admin/alerts"
+          element={
+            <ProtectedRoute>
+              <AdminAlertsPage />
             </ProtectedRoute>
           }
         />

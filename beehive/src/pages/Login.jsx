@@ -21,12 +21,23 @@ export default function Login() {
       if (!authLoading && user) {
         const { data: userData, error: userError } = await supabase
           .from("users")
-          .select("user_type")
+          .select("user_type, account_status")
           .eq("email", user.email)
           .maybeSingle();
 
         if (userError || !userData) {
-          setError("User record not found in database.");
+          navigate("/account-pending", {
+            replace: true,
+            state: { email: user.email },
+          });
+          return;
+        }
+
+        if (userData.account_status && userData.account_status !== "active") {
+          navigate("/account-pending", {
+            replace: true,
+            state: { email: user.email },
+          });
           return;
         }
 
@@ -43,7 +54,7 @@ export default function Login() {
 
   const handleLogin = async () => {
     if (activeTab !== "login") {
-      setError("Sign up is not implemented yet.");
+      navigate("/request-access");
       return;
     }
 
@@ -63,12 +74,26 @@ export default function Login() {
 
     const { data: userData, error: userError } = await supabase
       .from("users")
-      .select("user_type")
+      .select("user_type, account_status")
       .eq("email", email)
       .maybeSingle();
 
     if (userError || !userData) {
-      setError("User record not found in database.");
+      await supabase.auth.signOut();
+      navigate("/account-pending", {
+        replace: true,
+        state: { email },
+      });
+      setLoading(false);
+      return;
+    }
+
+    if (userData.account_status && userData.account_status !== "active") {
+      await supabase.auth.signOut();
+      navigate("/account-pending", {
+        replace: true,
+        state: { email },
+      });
       setLoading(false);
       return;
     }

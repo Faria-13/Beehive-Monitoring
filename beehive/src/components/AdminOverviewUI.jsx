@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { Link } from "react-router-dom";
-import { NavBar } from "./HiveOverviewUI";
+import AdminNavBar from "./AdminNavBar";
 import {
   Box,
   Button,
@@ -197,7 +197,7 @@ export default function AdminOverviewUI({
 
   return (
     <Box sx={{ minHeight: "100vh", bgcolor: "#fff9e9" }}>
-      <NavBar appTitle={appTitle} />
+      <AdminNavBar appTitle={appTitle} />
 
       <Box sx={{ px: { xs: 2, sm: 4, md: 6 }, py: { xs: 2, sm: 3, md: 4 } }}>
 

@@ -26,7 +26,7 @@ export default function HiveStatusCard({ hiveId }) {
         .eq("hive_id", hiveId)
         .eq("resolved", false)
         .order("timestamp", { ascending: false })
-        .limit(50);
+        .limit(2);
       if (data) setAlerts(data);
       setLoading(false);
     }
