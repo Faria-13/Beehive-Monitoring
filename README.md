@@ -32,12 +32,12 @@ BMP180 Sensor (Pressure)
 Voltage Monitoring Circuit
 
 # How It Works
-Sensors collect environmental data
-Data is packaged into a compact payload
-ESP32 transmits data via LoRa every 10 minutes
-Gateway receives and forwards data
-Backend parses and stores data in database
-Dashboard displays real-time and historical data
+1. Sensors collect environmental data
+2. Data is packaged into a compact payload
+3. ESP32 transmits data via LoRa every 10 minutes
+4. Gateway receives and forwards data
+5. Backend parses and stores data in database and triggers SMS alerts
+6. Dashboard displays real-time and historical data and alerts
 
 # Backend
 1. Handles data ingestion and parsing
@@ -56,9 +56,10 @@ The frontend application provides a user interface for monitoring hive data.
 # Repository Structure
 This repository is organized into hardware, backend, and application components:
 - `heltec-sensors/` – Firmware for the sensor node (data collection, LoRa transmission, power management)  
-- `backend/` – Backend services including data ingestion, payload parsing, and database integration  
-- `gateway/` – Web application (frontend dashboard, UI, authentication)  
-- `supabase/` – Schema and configuration for storing sensor, hive, and user data
+- `beehive/` – emily 
+- `gateway/` –  sx
+- `node_modules/` – erm
+- `supabase/` – Edge Function
 
 # Power System
 Battery-powered with solar charging
