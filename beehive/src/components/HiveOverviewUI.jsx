@@ -28,6 +28,7 @@ import {
   useTheme,
 } from "@mui/material";
 import ArrowRightIcon from "@mui/icons-material/ArrowRight";
+import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import MenuIcon from "@mui/icons-material/Menu";
 import DubaiLogo from "../assets/DubaiLogo.png";
 import overviewBg from "../assets/overviewBackground.png";
@@ -266,6 +267,7 @@ export function NavBar({
   const navigate = useNavigate();
   const location = useLocation();
   const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
   const useHamburgerNav = useMediaQuery(theme.breakpoints.down("md"));
   const [hamburgerAnchor, setHamburgerAnchor] = useState(null);
 
@@ -305,25 +307,35 @@ export function NavBar({
           </Typography>
         )}
 
-        {/* Brand link */}
+        {/* Brand link / mobile back button */}
         <Box sx={{ flexGrow: 1 }}>
-          <Typography
-            component={Link}
-            to="/hives"
-            fontFamily="Poppins, sans-serif"
-            fontWeight={700}
-            sx={{
-              display: "inline-flex",
-              width: "fit-content",
-              fontSize: { xs: 14, sm: 16, md: 18 },
-              color: isActive("/hives") ? "#fff" : "#000",
-              textDecoration: isActive("/hives") ? "underline" : "none",
-              textUnderlineOffset: "4px",
-              "&:hover": { textDecoration: "underline", opacity: 0.9 },
-            }}
-          >
-            {appTitle}
-          </Typography>
+          {isMobile ? (
+            <IconButton
+              aria-label="Go back"
+              onClick={() => navigate(-1)}
+              sx={{ color: "black" }}
+            >
+              <ArrowBackIcon />
+            </IconButton>
+          ) : (
+            <Typography
+              component={Link}
+              to="/hives"
+              fontFamily="Poppins, sans-serif"
+              fontWeight={700}
+              sx={{
+                display: "inline-flex",
+                width: "fit-content",
+                fontSize: { xs: 14, sm: 16, md: 18 },
+                color: isActive("/hives") ? "#fff" : "#000",
+                textDecoration: isActive("/hives") ? "underline" : "none",
+                textUnderlineOffset: "4px",
+                "&:hover": { textDecoration: "underline", opacity: 0.9 },
+              }}
+            >
+              {appTitle}
+            </Typography>
+          )}
         </Box>
 
         {useHamburgerNav ? (

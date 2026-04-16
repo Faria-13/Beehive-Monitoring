@@ -3,7 +3,6 @@ import { Link } from "react-router-dom";
 import AdminNavBar from "./AdminNavBar";
 import {
   Box,
-  Button,
   InputBase,
   Paper,
   Stack,
@@ -12,7 +11,6 @@ import {
   useTheme,
 } from "@mui/material";
 import SearchIcon from "@mui/icons-material/Search";
-import ArrowRightIcon from "@mui/icons-material/ArrowRight";
 
 // ─── Stat card ────────────────────────────────────────────────────────────────
 
@@ -293,21 +291,6 @@ export default function AdminOverviewUI({
             );
           })}
 
-          <Button
-            variant="text"
-            endIcon={<ArrowRightIcon />}
-            onClick={onFilterClick}
-            sx={{
-              ml: { xs: 1, md: 4 },
-              color: "black",
-              fontFamily: "Inter, sans-serif",
-              fontWeight: 500,
-              fontSize: { xs: 15, sm: 18, md: 24 },
-              textTransform: "none",
-            }}
-          >
-            Filters
-          </Button>
         </Stack>
 
         {/* Card grid */}

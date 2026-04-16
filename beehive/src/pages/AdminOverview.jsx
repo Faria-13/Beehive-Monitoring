@@ -18,6 +18,12 @@ export default function AdminOverview() {
         setLoading(true);
         setError(null);
 
+        const {
+          data: { user: authUser },
+          error: authErr,
+        } = await supabase.auth.getUser();
+        if (authErr) throw authErr;
+
         // ── Hives ──────────────────────────────────────────────────────────
         const { data: hiveData, error: hiveErr } = await supabase
           .from("beehives")
@@ -29,6 +35,12 @@ export default function AdminOverview() {
           .from("users")
           .select("user_id, first_name, last_name, email");
         if (userErr) throw userErr;
+
+        const visibleUsers = (userData ?? []).filter((u) => {
+          if (authUser?.email && u.email === authUser.email) return false;
+          if (authUser?.id && String(u.user_id) === String(authUser.id)) return false;
+          return true;
+        });
 
         // ── Active alerts (unresolved) ─────────────────────────────────────
         const { data: alertData } = await supabase
@@ -46,7 +58,7 @@ export default function AdminOverview() {
           hivesByOwner[hive.owner_id].push(hive.hive_id);
         }
 
-        const enrichedUsers = (userData ?? []).map((u) => {
+        const enrichedUsers = visibleUsers.map((u) => {
           const userHiveIds = hivesByOwner[u.user_id] ?? [];
           const alertCount  = userHiveIds.filter((id) => alertHiveSet.has(id)).length;
           return {
