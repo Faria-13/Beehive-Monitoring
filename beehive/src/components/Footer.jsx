@@ -23,7 +23,7 @@ export default function Footer() {
         sx={{ height: 125, width: "auto" }}
       />
       <Typography variant="body1" sx={{ color: "#fff", mt: 0.5, fontWeight: 700 }}>
-        contact@dubaihivemonitoring.com
+        ds6953@g.rit.edu
       </Typography>
     </Box>
   );
