@@ -310,13 +310,21 @@ export function NavBar({
         {/* Brand link / mobile back button */}
         <Box sx={{ flexGrow: 1 }}>
           {isMobile ? (
-            <IconButton
-              aria-label="Go back"
+            <Button
+              startIcon={<ArrowBackIcon />}
               onClick={() => navigate(-1)}
-              sx={{ color: "black" }}
+              sx={{
+                color: "black",
+                textTransform: "none",
+                fontFamily: "Poppins, sans-serif",
+                fontWeight: 700,
+                fontSize: 14,
+                minWidth: 0,
+                pl: 0,
+              }}
             >
-              <ArrowBackIcon />
-            </IconButton>
+              Back
+            </Button>
           ) : (
             <Typography
               component={Link}

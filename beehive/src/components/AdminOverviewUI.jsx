@@ -56,7 +56,7 @@ function HiveCard({ hive, isMobile, isTablet }) {
   return (
     <Paper
       component={Link}
-      to={`/hives/${hive.hive_id}`}
+      to={`/admin/hives/${hive.hive_id}`}
       variant="outlined"
       sx={{
         width: cardW,

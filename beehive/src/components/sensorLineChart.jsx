@@ -30,19 +30,19 @@ function StatBox({ label, value, unit }) {
         flex: 1,
         border: "2px solid var(--outline)",
         borderRadius: "14px",
-        px: 2,
-        py: 1.25,
+        px: { xs: 0.75, sm: 2 },
+        py: { xs: 0.75, sm: 1.25 },
         textAlign: "center",
         backgroundColor: "var(--bg)",
       }}
     >
       <Typography
         variant="caption"
-        sx={{ display: "block", color: "text.secondary", mb: 0.25 }}
+        sx={{ display: "block", color: "text.secondary", mb: 0.25, fontSize: { xs: "0.6rem", sm: "0.75rem" } }}
       >
         {label}
       </Typography>
-      <Typography variant="body1" sx={{ fontWeight: 600 }}>
+      <Typography variant="body1" sx={{ fontWeight: 600, fontSize: { xs: "0.7rem", sm: "1rem" } }}>
         {display}
       </Typography>
     </Box>

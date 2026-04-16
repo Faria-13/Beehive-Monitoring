@@ -15,6 +15,7 @@ import AdminPendingRequests from "./pages/AdminPendingRequests";
 import AdminRequestReview from "./pages/AdminRequestReview";
 import AdminDatabasePage from "./pages/AdminDatabasePage";
 import AdminAlertsPage from "./pages/AdminAlertsPage";
+import AdminHiveDashboard from "./pages/AdminHiveDashboard";
 
 function App() {
   return (
@@ -76,6 +77,15 @@ function App() {
           element={
             <ProtectedRoute>
               <AdminAlertsPage />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/admin/hives/:hiveId"
+          element={
+            <ProtectedRoute>
+              <AdminHiveDashboard />
             </ProtectedRoute>
           }
         />
