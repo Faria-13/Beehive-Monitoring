@@ -57,12 +57,6 @@ The frontend application provides a user interface for monitoring hive data.
 This repository is organized into hardware, backend, and application components:
 - `heltec-sensors/` – Firmware for the sensor node (data collection, LoRa transmission, power management)  
 - `beehive/` – React frontend web application for displaying hive data (dashboard UI)
-      -public/ – Static files
-      -src/ – Main application code
-      -api/ – API calls
-      -components/ – Reusable UI components
-      -pages/ – Page-level views
-      -assets/ – Images and styles
 - `gateway/` –  mock test script to test RIT Wifi and HTTP Post request to Supabase 
 - `supabase/` – Edge Function to pull external API data 
 - `sx1302_hal/` – LoRa gateway hardware abstraction layer
