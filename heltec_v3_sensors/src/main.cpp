@@ -47,6 +47,9 @@ static const int LORA_DIO1 = 14;
 static const uint8_t SUBBAND = 2;   // US915 FSB2
 static const uint8_t FPORT   = 1;
 
+// Downlink commands
+static const uint8_t CMD_RESTART = 0x01;
+
 // OTAA credentials
 uint64_t joinEUI = 0x0000000000000000ULL;
 uint64_t devEUI  = 0x70B3D57ED0076ADEULL;
@@ -124,6 +127,15 @@ void printRadioLibState(const char* label, int16_t state) {
   Serial.print(label);
   Serial.print(" = ");
   Serial.println(state);
+}
+
+void printHexBytes(const uint8_t* data, size_t len) {
+  for (size_t i = 0; i < len; i++) {
+    if (data[i] < 0x10) Serial.print('0');
+    Serial.print(data[i], HEX);
+    if (i + 1 < len) Serial.print(' ');
+  }
+  Serial.println();
 }
 
 // ============================================================
@@ -352,6 +364,46 @@ static float readBatteryPercent() {
 }
 
 // ============================================================
+//                  DOWNLINK HANDLING
+// ============================================================
+
+void handleDownlink(const uint8_t* data, size_t len, uint8_t port) {
+  Serial.print("Downlink FPort: ");
+  Serial.println(port);
+
+  Serial.print("Downlink length: ");
+  Serial.println(len);
+
+  Serial.print("Downlink bytes: ");
+  printHexBytes(data, len);
+
+  if (len == 0) {
+    Serial.println("Downlink empty.");
+    return;
+  }
+
+  if (port != FPORT) {
+    Serial.println("Downlink ignored: unexpected FPort.");
+    return;
+  }
+
+  switch (data[0]) {
+    case CMD_RESTART:
+      Serial.println("Restart command received.");
+      Serial.flush();
+      delay(1000);
+      ESP.restart();
+      break;
+
+    default:
+      Serial.print("Unknown downlink command: 0x");
+      if (data[0] < 0x10) Serial.print('0');
+      Serial.println(data[0], HEX);
+      break;
+  }
+}
+
+// ============================================================
 //                  LORAWAN PREPARE / JOIN
 // ============================================================
 
@@ -434,8 +486,22 @@ bool sendUplinkOnce() {
   int32_t pressurePa = bmp.readPressure();
   float batteryPercent = readBatteryPercent();
 
+  Serial.print("CO2: ");
+  Serial.println(co2);
+  Serial.print("Humidity: ");
+  Serial.println(humidity, 2);
+  Serial.print("BMP Temp: ");
+  Serial.println(bmpTemp, 2);
+  Serial.print("Pressure Pa: ");
+  Serial.println(pressurePa);
+  Serial.print("Battery %: ");
+  Serial.println(batteryPercent, 2);
+
   uint8_t payload[10];
   packPayload(payload, co2, batteryPercent, humidity, bmpTemp, (float)pressurePa);
+
+  Serial.print("Uplink bytes: ");
+  printHexBytes(payload, sizeof(payload));
 
   delay(300);
 
@@ -446,13 +512,40 @@ bool sendUplinkOnce() {
   Serial.print("After uplink, node.isActivated() = ");
   Serial.println(node->isActivated() ? "true" : "false");
 
-  // Positive values can still mean success with MAC activity/downlink.
+  // Negative = failure
   if (state < 0) {
     Serial.println("Uplink failed.");
     return false;
   }
 
+  // Positive or zero = uplink okay, possibly MAC/downlink activity
   Serial.println("Uplink sent.");
+
+  // Try to inspect any application downlink that may have been received.
+  // Depending on RadioLib version, these helpers may differ. The calls below
+  // are the intended pattern for reading queued application downlink data.
+  size_t downlinkLen = node->getDownlinkSize();
+
+  if (downlinkLen > 0) {
+    uint8_t downlinkPort = node->getDownlinkPort();
+    uint8_t downlink[32];
+
+    if (downlinkLen > sizeof(downlink)) {
+      downlinkLen = sizeof(downlink);
+    }
+
+    int16_t dlState = node->getDownlink(downlink, downlinkLen);
+    printRadioLibState("getDownlink()", dlState);
+
+    if (dlState >= 0) {
+      handleDownlink(downlink, downlinkLen, downlinkPort);
+    } else {
+      Serial.println("Failed to read downlink payload.");
+    }
+  } else {
+    Serial.println("No application downlink received.");
+  }
+
   return true;
 }
 
