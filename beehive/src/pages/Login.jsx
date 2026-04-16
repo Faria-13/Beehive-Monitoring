@@ -61,8 +61,10 @@ export default function Login() {
     setLoading(true);
     setError(null);
 
+    const normalizedEmail = email.trim().toLowerCase();
+
     const { error } = await supabase.auth.signInWithPassword({
-      email,
+      email: normalizedEmail,
       password,
     });
 
@@ -75,14 +77,14 @@ export default function Login() {
     const { data: userData, error: userError } = await supabase
       .from("users")
       .select("user_type, account_status")
-      .eq("email", email)
+      .eq("email", normalizedEmail)
       .maybeSingle();
 
     if (userError || !userData) {
       await supabase.auth.signOut();
       navigate("/account-pending", {
         replace: true,
-        state: { email },
+        state: { email: normalizedEmail },
       });
       setLoading(false);
       return;
@@ -92,7 +94,7 @@ export default function Login() {
       await supabase.auth.signOut();
       navigate("/account-pending", {
         replace: true,
-        state: { email },
+        state: { email: normalizedEmail },
       });
       setLoading(false);
       return;
