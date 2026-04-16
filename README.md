@@ -22,14 +22,14 @@ Sensor Node (ESP32)
         ↓
  Backend / API
         ↓
-     Database
+     Database (Supabase)
 
 # Hardware Components
 ESP32 LoRa Board (SX1262)
 SCD41 Sensor (CO₂, Temperature, Humidity)
 BMP180 Sensor (Pressure)
 18650 Battery + Solar Panel
-Voltage Monitoring Circuit
+
 
 # How It Works
 1. Sensors collect environmental data
@@ -56,10 +56,18 @@ The frontend application provides a user interface for monitoring hive data.
 # Repository Structure
 This repository is organized into hardware, backend, and application components:
 - `heltec-sensors/` – Firmware for the sensor node (data collection, LoRa transmission, power management)  
-- `beehive/` – emily 
-- `gateway/` –  sx
-- `node_modules/` – erm
-- `supabase/` – Edge Function
+- `beehive/` – React frontend web application for displaying hive data (dashboard UI)
+      -public/ – Static files
+      -src/ – Main application code
+      -api/ – API calls
+      -components/ – Reusable UI components
+      -pages/ – Page-level views
+      -assets/ – Images and styles
+- `gateway/` –  mock test script to test RIT Wifi and HTTP Post request to Supabase 
+- `supabase/` – Edge Function to pull external API data 
+- `sx1302_hal/` – LoRa gateway hardware abstraction layer
+- `node_modules/` – Project dependancies 
+
 
 # Power System
 Battery-powered with solar charging
@@ -67,11 +75,11 @@ Optimized for long-term, low-power operation
 Voltage monitored to ensure system reliability
 
 # Team
-Abdullah Najumdeen – Project Manager
-Anthony Roque – Hardware Systems Lead
-Faria Sultana – Systems & Integration Lead
-Juan – Backend Engineer
-Emily – Frontend & UI/UX Designer
-Drew Silberman – Database Engineer
+Mohamed Abdullah Najumudeen - Project Manager
+Anthony Roque - System Administrator
+Faria Sultana - Backend Developer
+Juan Gomez Botero - Frontend Developer
+Emily Winnick - Frontend & UI/UX Designer
+Drew Silberman - Database Administrator
 
 
