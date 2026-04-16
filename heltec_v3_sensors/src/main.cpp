@@ -2,31 +2,39 @@
 #include <Wire.h>
 #include <SPI.h>
 #include <math.h>
+#include <Preferences.h>
+#include <esp_sleep.h>
+#include <esp_system.h>
 
 #include <Adafruit_BMP085.h>
 #include <SensirionI2CScd4x.h>
 #include <SensirionCore.h>
 #include <RadioLib.h>
+
+// ============================================================
+//                        USER SETTINGS
+// ============================================================
+
+// Set TRUE for one upload only if you want to wipe bad saved nonce history.
+// After one successful fresh join, set this back to false.
+#define FORCE_CLEAR_NONCES_ONCE false
+
+// Deep sleep in minutes
+#define TIME_TO_SLEEP_MINUTES 3
+
+// Battery calibration
 #define BATTERY_PIN 1
 #define ADC_CTRL_PIN 37
-#define BATTERY_LOW_VOLTAGE 2.75
-#define BATTERY_HIGH_VOLTAGE 4.2
+#define BATTERY_LOW_VOLTAGE 3.10f
+#define BATTERY_HIGH_VOLTAGE 4.20f
+#define BATTERY_DIVIDER_RATIO 5.1f
 
-// -------------------- I2C / Sensors --------------------
+// I2C
 static const int SDA_PIN = 39;
 static const int SCL_PIN = 40;
 static const uint8_t SCD4X_ADDR = 0x62;
 
-
-
-Adafruit_BMP085 bmp;
-SensirionI2cScd4x scd4x;
-
-// Define the sleep time in microseconds
-#define uS_TO_S_FACTOR 1000000ULL  /* Conversion factor for micro seconds to seconds */
-#define TIME_TO_SLEEP  600         /* Time ESP32 will go to sleep (in seconds) - 10 minutes */
-
-// -------------------- Heltec WiFi LoRa 32 V3 SX1262 --------------------
+// Heltec WiFi LoRa 32 V3 SX1262
 static const int LORA_CS   = 8;
 static const int LORA_SCK  = 9;
 static const int LORA_MOSI = 10;
@@ -35,19 +43,13 @@ static const int LORA_RST  = 12;
 static const int LORA_BUSY = 13;
 static const int LORA_DIO1 = 14;
 
-SX1262 radio = new Module(LORA_CS, LORA_DIO1, LORA_RST, LORA_BUSY);
+// LoRaWAN
+static const uint8_t SUBBAND = 2;   // US915 FSB2
+static const uint8_t FPORT   = 1;
 
-// US915, sub-band 2
-static const uint8_t SUBBAND = 2;
-static const uint8_t FPORT = 1;
-
-LoRaWANNode node(&radio, &US915, SUBBAND);
-
-// -------------------- OTAA Credentials --------------------
-// These are the values from your earlier code.
-// Change them here if you updated them in TTN/TTS.
+// OTAA credentials
 uint64_t joinEUI = 0x0000000000000000ULL;
-uint64_t devEUI  = 0x70B3D57ED0076032ULL;
+uint64_t devEUI  = 0x70B3D57ED0076ADEULL;
 
 uint8_t appKey[16] = {
   0xD0, 0xFC, 0xAA, 0x3C,
@@ -56,8 +58,25 @@ uint8_t appKey[16] = {
   0xCC, 0xF6, 0xD2, 0xC1
 };
 
-// -------------------- Helpers --------------------
-static void printScdError(const char *where, uint16_t error) {
+// ============================================================
+//                        GLOBALS
+// ============================================================
+
+#define uS_TO_S_FACTOR 1000000ULL
+#define TIME_TO_SLEEP_SEC (TIME_TO_SLEEP_MINUTES * 60)
+
+Preferences store;
+Adafruit_BMP085 bmp;
+SensirionI2cScd4x scd4x;
+
+SX1262 radio = new Module(LORA_CS, LORA_DIO1, LORA_RST, LORA_BUSY);
+LoRaWANNode* node = nullptr;
+
+// ============================================================
+//                        HELPERS
+// ============================================================
+
+static void printScdError(const char* where, uint16_t error) {
   if (!error) return;
 
   char msg[256];
@@ -71,41 +90,195 @@ static void printScdError(const char *where, uint16_t error) {
 template <typename Func>
 static uint16_t retrySensirion(Func f, int attempts, uint32_t delayMs) {
   uint16_t err = 0;
-
   for (int i = 0; i < attempts; i++) {
     err = f();
     if (!err) return 0;
     delay(delayMs);
   }
-
   return err;
 }
 
+void printWakeReason() {
+  esp_sleep_wakeup_cause_t wakeup_reason = esp_sleep_get_wakeup_cause();
+
+  Serial.print("Wake reason: ");
+  switch (wakeup_reason) {
+    case ESP_SLEEP_WAKEUP_TIMER:
+      Serial.println("TIMER");
+      break;
+    case ESP_SLEEP_WAKEUP_UNDEFINED:
+      Serial.println("UNDEFINED / COLD BOOT");
+      break;
+    default:
+      Serial.printf("OTHER (%d)\n", wakeup_reason);
+      break;
+  }
+}
+
+void printResetReason() {
+  Serial.print("Reset reason CPU0: ");
+  Serial.println((int)esp_reset_reason());
+}
+
+void printRadioLibState(const char* label, int16_t state) {
+  Serial.print(label);
+  Serial.print(" = ");
+  Serial.println(state);
+}
+
+// ============================================================
+//                 LORAWAN NONCE STORAGE ONLY
+// ============================================================
+
+void saveNoncesToFlash() {
+  if (!node) return;
+
+  uint8_t nonceBuf[RADIOLIB_LORAWAN_NONCES_BUF_SIZE];
+  memcpy(nonceBuf, node->getBufferNonces(), RADIOLIB_LORAWAN_NONCES_BUF_SIZE);
+
+  store.begin("radiolib", false);
+  store.putBytes("nonces", nonceBuf, RADIOLIB_LORAWAN_NONCES_BUF_SIZE);
+  store.end();
+
+  Serial.println("Saved LoRaWAN nonces to flash.");
+}
+
+bool restoreNoncesFromFlash() {
+  if (!node) return false;
+
+  store.begin("radiolib", true);
+
+  size_t len = store.getBytesLength("nonces");
+  if (len != RADIOLIB_LORAWAN_NONCES_BUF_SIZE) {
+    store.end();
+    Serial.println("No valid saved nonces in flash.");
+    return false;
+  }
+
+  uint8_t nonceBuf[RADIOLIB_LORAWAN_NONCES_BUF_SIZE];
+  store.getBytes("nonces", nonceBuf, RADIOLIB_LORAWAN_NONCES_BUF_SIZE);
+  store.end();
+
+  int16_t state = node->setBufferNonces(nonceBuf);
+  if (state == RADIOLIB_ERR_NONE) {
+    Serial.println("Restored LoRaWAN nonces from flash.");
+    return true;
+  }
+
+  Serial.print("Failed to restore nonces: ");
+  Serial.println(state);
+  return false;
+}
+
+void clearNoncesInFlash() {
+  store.begin("radiolib", false);
+  store.remove("nonces");
+  store.end();
+  Serial.println("Cleared LoRaWAN nonces from flash.");
+}
+
+// ============================================================
+//                        PAYLOAD
+// ============================================================
+
+// Payload layout (10 bytes total):
+// [0..1]  CO2 ppm, uint16 little-endian
+// [2..3]  battery %, value * 100, int16 little-endian
+// [4..5]  humidity %, value * 100, uint16 little-endian
+// [6..7]  BMP180 temp C, value * 100, int16 little-endian
+// [8..9]  pressure hPa, value * 10, uint16 little-endian
 static void packPayload(
-  uint8_t *payload,
+  uint8_t* payload,
   uint16_t co2,
-  float scdTemp,
+  float batteryPercent,
   float rh,
   float bmpTemp,
-  int32_t pressurePa
+  float bmpPressurePa
 ) {
-  int16_t scdT = (int16_t)lroundf(scdTemp * 100.0f);
-  uint16_t hum = (uint16_t)lroundf(rh * 100.0f);
-  int16_t bmpT = (int16_t)lroundf(bmpTemp * 100.0f);
-  uint32_t prs = (uint32_t)pressurePa;
+  int16_t battPct = (int16_t)lroundf(batteryPercent * 100.0f);
+  uint16_t hum    = (uint16_t)lroundf(rh * 100.0f);
+  int16_t bmpT    = (int16_t)lroundf(bmpTemp * 100.0f);
 
-  payload[0]  = co2 & 0xFF;
-  payload[1]  = (co2 >> 8) & 0xFF;
+  float pressureHpa = bmpPressurePa / 100.0f;
+  uint16_t bmpP     = (uint16_t)lroundf(pressureHpa * 10.0f);
 
-  payload[2]  = scdT & 0xFF;
-  payload[3]  = (scdT >> 8) & 0xFF;
+  payload[0] = co2 & 0xFF;
+  payload[1] = (co2 >> 8) & 0xFF;
 
-  payload[4]  = hum & 0xFF;
-  payload[5]  = (hum >> 8) & 0xFF;
+  payload[2] = battPct & 0xFF;
+  payload[3] = (battPct >> 8) & 0xFF;
 
-  payload[6]  = bmpT & 0xFF;
-  payload[7]  = (bmpT >> 8) & 0xFF;
+  payload[4] = hum & 0xFF;
+  payload[5] = (hum >> 8) & 0xFF;
 
+  payload[6] = bmpT & 0xFF;
+  payload[7] = (bmpT >> 8) & 0xFF;
+
+  payload[8] = bmpP & 0xFF;
+  payload[9] = (bmpP >> 8) & 0xFF;
+}
+
+// ============================================================
+//                     RADIO / NODE SETUP
+// ============================================================
+
+void rebuildLoRaWANNode() {
+  if (node != nullptr) {
+    delete node;
+    node = nullptr;
+  }
+
+  node = new LoRaWANNode(&radio, &US915, SUBBAND);
+  Serial.println("LoRaWAN node rebuilt.");
+}
+
+bool initRadio() {
+  SPI.begin(LORA_SCK, LORA_MISO, LORA_MOSI, LORA_CS);
+
+  int16_t state = radio.begin(915.0);
+  Serial.print("radio.begin() = ");
+  Serial.println(state);
+
+  if (state != RADIOLIB_ERR_NONE) {
+    return false;
+  }
+
+  delay(50);
+
+  radio.setDio2AsRfSwitch(true);
+  radio.setTCXO(0.8);
+  radio.setCurrentLimit(140.0);
+  radio.setOutputPower(22);
+
+  Serial.println("SX1262 configured.");
+  return true;
+}
+
+// ============================================================
+//                         SENSORS
+// ============================================================
+
+bool waitForScd41Data(uint32_t timeoutMs = 7000) {
+  uint32_t start = millis();
+
+  while (millis() - start < timeoutMs) {
+    bool dataReady = false;
+    uint16_t err = scd4x.getDataReadyStatus(dataReady);
+
+    if (err) {
+      printScdError("getDataReadyStatus", err);
+      return false;
+    }
+
+    if (dataReady) {
+      return true;
+    }
+
+    delay(500);
+  }
+
+  Serial.println("SCD41 timed out waiting for data.");
+  return false;
 }
 
 bool initSensors() {
@@ -131,6 +304,7 @@ bool initSensors() {
 
   retrySensirion([&]() { return scd4x.stopPeriodicMeasurement(); }, 3, 200);
   delay(300);
+
   retrySensirion([&]() { return scd4x.reinit(); }, 3, 300);
   delay(500);
 
@@ -145,29 +319,52 @@ bool initSensors() {
   return bmpOk && (err == 0);
 }
 
-bool initRadio() {
-  SPI.begin(LORA_SCK, LORA_MISO, LORA_MOSI, LORA_CS);
+// ============================================================
+//                    BATTERY MEASUREMENT
+// ============================================================
 
-  int16_t state = radio.begin();
-  Serial.print("radio.begin() = ");
-  Serial.println(state);
+static float readBatteryPercent() {
+  digitalWrite(ADC_CTRL_PIN, HIGH);
+  delay(10);
 
-  if (state != RADIOLIB_ERR_NONE) {
+  int raw = analogRead(BATTERY_PIN);
+
+  float voltage = (raw / 4095.0f) * 3.3f;
+  float batteryVoltage = voltage * BATTERY_DIVIDER_RATIO;
+
+  float percent =
+    ((batteryVoltage - BATTERY_LOW_VOLTAGE) /
+     (BATTERY_HIGH_VOLTAGE - BATTERY_LOW_VOLTAGE)) * 100.0f;
+
+  if (percent < 0.0f) percent = 0.0f;
+  if (percent > 100.0f) percent = 100.0f;
+
+  Serial.print("Battery voltage: ");
+  Serial.print(batteryVoltage, 2);
+  Serial.println(" V");
+
+  Serial.print("Battery percent: ");
+  Serial.print(percent, 1);
+  Serial.println("%");
+
+  digitalWrite(ADC_CTRL_PIN, LOW);
+  return percent;
+}
+
+// ============================================================
+//                  LORAWAN PREPARE / JOIN
+// ============================================================
+
+bool prepareLoRaWAN() {
+  if (!node) {
+    Serial.println("LoRaWAN node is null.");
     return false;
   }
 
-  // Heltec V3 SX1262 board helpers
-  radio.setDio2AsRfSwitch(true);
-  radio.setTCXO(1.8);
+  Serial.println("Preparing LoRaWAN state...");
+  Serial.println("Starting OTAA...");
 
-  Serial.println("SX1262 configured.");
-  return true;
-}
-
-bool joinNetwork() {
-  Serial.println("Starting OTAA join...");
-
-  int16_t state = node.beginOTAA(joinEUI, devEUI, NULL, appKey);
+  int16_t state = node->beginOTAA(joinEUI, devEUI, NULL, appKey);
   Serial.print("beginOTAA() = ");
   Serial.println(state);
 
@@ -175,37 +372,51 @@ bool joinNetwork() {
     return false;
   }
 
-  for (int attempt = 1; attempt <= 10; attempt++) {
-    Serial.print("activateOTAA attempt ");
-    Serial.println(attempt);
+  node->setADR(false);
+  node->setDatarate(0);
+  node->setTxPower(20);
 
-    state = node.activateOTAA();
-    Serial.print("activateOTAA() = ");
-    Serial.println(state);
+  restoreNoncesFromFlash();
 
-    if (state == RADIOLIB_ERR_NONE) {
-      Serial.println("Join successful.");
-      return true;
-    }
+  state = node->activateOTAA();
+  Serial.print("activateOTAA() = ");
+  Serial.println(state);
 
-    delay(5000);
-  }
+  bool activated = node->isActivated();
+  Serial.print("node.isActivated() = ");
+  Serial.println(activated ? "true" : "false");
 
-  Serial.println("Join failed.");
-  return false;
-}
-
-bool readAndSend() {
-  bool dataReady = false;
-  uint16_t err = scd4x.getDataReadyStatus(dataReady);
-
-  if (err) {
-    printScdError("getDataReadyStatus", err);
+  if (!activated) {
+    Serial.println("OTAA failed.");
     return false;
   }
 
-  if (!dataReady) {
-    Serial.println("SCD41 data not ready yet.");
+  Serial.println("LoRaWAN active.");
+  saveNoncesToFlash();
+  return true;
+}
+
+// ============================================================
+//                        UPLINK
+// ============================================================
+
+bool sendUplinkOnce() {
+  if (!node) {
+    Serial.println("LoRaWAN node is null.");
+    return false;
+  }
+
+  Serial.println("---- readAndSend() ----");
+  Serial.print("Before uplink, node.isActivated() = ");
+  Serial.println(node->isActivated() ? "true" : "false");
+
+  if (!node->isActivated()) {
+    Serial.println("Node is not activated before uplink.");
+    return false;
+  }
+
+  if (!waitForScd41Data()) {
+    Serial.println("SCD41 data not ready.");
     return false;
   }
 
@@ -213,23 +424,29 @@ bool readAndSend() {
   float scdTemp = 0.0f;
   float humidity = 0.0f;
 
-  err = scd4x.readMeasurement(co2, scdTemp, humidity);
+  uint16_t err = scd4x.readMeasurement(co2, scdTemp, humidity);
   if (err) {
     printScdError("readMeasurement", err);
     return false;
   }
 
   float bmpTemp = bmp.readTemperature();
-  int32_t pressure = bmp.readPressure();
+  int32_t pressurePa = bmp.readPressure();
+  float batteryPercent = readBatteryPercent();
 
-  uint8_t payload[11];
-  packPayload(payload, co2, scdTemp, humidity, bmpTemp, pressure);
+  uint8_t payload[10];
+  packPayload(payload, co2, batteryPercent, humidity, bmpTemp, (float)pressurePa);
+
+  delay(300);
 
   Serial.println("Sending uplink...");
-  int16_t state = node.sendReceive(payload, sizeof(payload), FPORT);
-  Serial.print("sendReceive() = ");
-  Serial.println(state);
+  int16_t state = node->sendReceive(payload, sizeof(payload), FPORT, false);
+  printRadioLibState("sendReceive()", state);
 
+  Serial.print("After uplink, node.isActivated() = ");
+  Serial.println(node->isActivated() ? "true" : "false");
+
+  // Positive values can still mean success with MAC activity/downlink.
   if (state < 0) {
     Serial.println("Uplink failed.");
     return false;
@@ -239,15 +456,78 @@ bool readAndSend() {
   return true;
 }
 
+bool readAndSend() {
+  // First attempt
+  if (sendUplinkOnce()) {
+    return true;
+  }
+
+  Serial.println("Reinitializing radio and node once, without forcing an OTAA retry in this cycle...");
+
+  if (!initRadio()) {
+    Serial.println("Radio reinit failed.");
+    return false;
+  }
+
+  rebuildLoRaWANNode();
+
+  int16_t state = node->beginOTAA(joinEUI, devEUI, NULL, appKey);
+  Serial.print("beginOTAA() after radio reinit = ");
+  Serial.println(state);
+
+  if (state != RADIOLIB_ERR_NONE) {
+    return false;
+  }
+
+  node->setADR(false);
+  node->setDatarate(0);
+  node->setTxPower(20);
+
+  restoreNoncesFromFlash();
+
+  state = node->activateOTAA();
+  Serial.print("activateOTAA() after radio reinit = ");
+  Serial.println(state);
+
+  Serial.print("node.isActivated() after radio reinit = ");
+  Serial.println(node->isActivated() ? "true" : "false");
+
+  if (!node->isActivated()) {
+    Serial.println("Node not active after radio reinit.");
+    return false;
+  }
+
+  return sendUplinkOnce();
+}
+
+// ============================================================
+//                          SETUP
+// ============================================================
+
 void setup() {
   Serial.begin(115200);
   delay(1500);
 
   Serial.println();
   Serial.println("Booting Heltec V3 sensor node...");
+  printResetReason();
+  printWakeReason();
+
+  pinMode(ADC_CTRL_PIN, OUTPUT);
+  digitalWrite(ADC_CTRL_PIN, LOW);
+
+  analogReadResolution(12);
+  analogSetPinAttenuation(BATTERY_PIN, ADC_11db);
+
+  if (FORCE_CLEAR_NONCES_ONCE) {
+    Serial.println("FORCE_CLEAR_NONCES_ONCE enabled.");
+    clearNoncesInFlash();
+  }
 
   bool sensorsOk = initSensors();
   bool radioOk = initRadio();
+
+  rebuildLoRaWANNode();
 
   if (!sensorsOk) {
     Serial.println("Sensor init incomplete.");
@@ -260,46 +540,30 @@ void setup() {
     }
   }
 
-  if (!joinNetwork()) {
-    Serial.println("Network join failed. Halting.");
+  if (!prepareLoRaWAN()) {
+    Serial.println("Network prepare/join failed. Halting.");
     while (true) {
       delay(2000);
     }
   }
-
-  pinMode(ADC_CTRL_PIN, OUTPUT);
-  digitalWrite(ADC_CTRL_PIN, HIGH);
-
-  analogReadResolution(12);
-  analogSetPinAttenuation(BATTERY_PIN, ADC_11db);
 }
 
+// ============================================================
+//                           LOOP
+// ============================================================
+
 void loop() {
-  readAndSend();
+  bool ok = readAndSend();
 
-  int raw = analogRead(BATTERY_PIN);
+  if (!ok) {
+    Serial.println("Cycle ended with uplink failure.");
+  }
 
+  Serial.println("Entering deep sleep...");
+  Serial.flush();
 
-  float voltage = (raw / 4095.0) * 3.3;  
-  float batteryVoltage = voltage * 5.1; 
+  digitalWrite(ADC_CTRL_PIN, LOW);
 
-  float percent = (batteryVoltage - BATTERY_LOW_VOLTAGE)/(BATTERY_HIGH_VOLTAGE - BATTERY_LOW_VOLTAGE) * 100;
-  Serial.println("Battery Level: ");
-  Serial.print(percent, 1);
-  Serial.println("%");
-
-  
-
-  // 3. Prepare for Deep Sleep
-  Serial.println("Entering deep sleep for 10 minutes...");
-  Serial.flush(); // Ensure all serial data is printed before CPU stops
-
-  // Power down high-current pins if necessary
-  digitalWrite(ADC_CTRL_PIN, LOW); 
-
-  // Set the timer and go to sleep
-  esp_sleep_enable_timer_wakeup(TIME_TO_SLEEP * uS_TO_S_FACTOR);
+  esp_sleep_enable_timer_wakeup((uint64_t)TIME_TO_SLEEP_SEC * uS_TO_S_FACTOR);
   esp_deep_sleep_start();
-
-  // deep sleep implementation 
 }
