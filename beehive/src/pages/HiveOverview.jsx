@@ -237,7 +237,6 @@ export default function HiveOverview() {
       stats={stats}
       hives={uiHives}
       onHiveUpdated={() => setRefreshKey((k) => k + 1)}
-      onDatabaseClick={() => {}}
       onSettingsClick={() => {}}
     />
   );
