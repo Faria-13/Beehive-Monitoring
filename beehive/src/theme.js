@@ -7,7 +7,7 @@ export const COLORS = {
   outline: "#1F0300",
   red: "#FE5C05",
   gold: "#FE9805",
-  caption: "#C9C7BA",
+  caption: "#888880",
 };
 
 const theme = createTheme({
@@ -29,10 +29,10 @@ const theme = createTheme({
     fontFamily: `"Inter", system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif`,
     h1: { fontFamily: `"Poppins", sans-serif`, fontWeight: 500, fontSize: "40px" },
     h2: { fontFamily: `"Poppins", sans-serif`, fontWeight: 700, fontSize: "32px" },
-    h3: { fontFamily: `"Inter", sans-serif`, fontWeight: 500, fontSize: "20px" },
+    h3: { fontFamily: `"Poppins", sans-serif`, fontWeight: 500, fontSize: "18px" },
     h4: { fontFamily: `"Inter", sans-serif`, fontWeight: 500, fontSize: "20px" },
     body1: { fontFamily: `"Inter", sans-serif`, fontWeight: 400, fontSize: "18px" },
-    caption: { fontFamily: `"Inter", sans-serif`, fontWeight: 300, fontSize: "15px", color: COLORS.caption },
+    caption: { fontFamily: `"Inter", sans-serif`, fontWeight: 300, fontSize: "15px", color: "#888880" },
   },
   shape: { borderRadius: 14 },
   components: {

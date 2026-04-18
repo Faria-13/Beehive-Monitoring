@@ -183,7 +183,10 @@
  C:/Users/Antma/.platformio/packages/framework-arduinoespressif32/cores/esp32/esp32-hal.h \
  C:/Users/Antma/.platformio/packages/framework-arduinoespressif32/libraries/SPI/src/SPI.h \
  C:/Users/Antma/.platformio/packages/framework-arduinoespressif32/cores/esp32/esp32-hal-spi.h \
+<<<<<<< HEAD
  C:/Users/Antma/.platformio/packages/framework-arduinoespressif32/libraries/Preferences/src/Preferences.h \
+=======
+>>>>>>> 159b1288191cbac2815788b47b33cbeab81e1a6e
  .pio/libdeps/heltec_wifi_lora_32_v3/Adafruit\ BMP085\ Library/Adafruit_BMP085.h \
  .pio/libdeps/heltec_wifi_lora_32_v3/Adafruit\ BusIO/Adafruit_I2CDevice.h \
  .pio/libdeps/heltec_wifi_lora_32_v3/Sensirion\ I2C\ SCD4x/src/SensirionI2CScd4x.h \
