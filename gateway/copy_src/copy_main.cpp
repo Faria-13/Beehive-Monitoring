@@ -15,11 +15,11 @@
 //                        USER SETTINGS
 // ============================================================
 
-// Set true for one upload only if you want to wipe saved nonce history.
+// Set TRUE for one upload only if you want to wipe saved nonce history.
 // After one fresh test, set it back to false.
 #define FORCE_CLEAR_NONCES_ONCE false
 
-// Deep sleep in minutes between sends
+// Default deep sleep in minutes
 #define DEFAULT_SLEEP_MINUTES 3
 
 // Battery calibration
@@ -29,14 +29,14 @@
 #define BATTERY_HIGH_VOLTAGE 4.20f
 #define BATTERY_DIVIDER_RATIO 5.1f
 
-// I2C pins for Heltec WiFi LoRa 32 V3
+// I2C pins
 static const int SDA_PIN = 40;
 static const int SCL_PIN = 39;
 
 // SCD41 default I2C address
 static const uint8_t SCD4X_ADDR = 0x62;
 
-// Heltec WiFi LoRa 32 V3 SX1262 pins
+// Heltec WiFi LoRa 32 V3 SX1262
 static const int LORA_CS   = 8;
 static const int LORA_SCK  = 9;
 static const int LORA_MOSI = 10;
@@ -46,12 +46,8 @@ static const int LORA_BUSY = 13;
 static const int LORA_DIO1 = 14;
 
 // LoRaWAN
-static const uint8_t SUBBAND = 2;     // US915 FSB2
+static const uint8_t SUBBAND = 2;      // US915 FSB2
 static const uint8_t UPLINK_FPORT = 1;
-
-// OTAA join behavior
-static const uint8_t OTAA_JOIN_ATTEMPTS = 3;
-static const uint32_t OTAA_RETRY_DELAY_MS = 4000;
 
 // ============================================================
 //                 OTAA CREDENTIALS - KEEP YOUR VALUES
@@ -82,7 +78,6 @@ LoRaWANNode* node = nullptr;
 
 bool bmpOk = false;
 bool scdOk = false;
-bool radioOk = false;
 uint8_t g_sleepMinutes = DEFAULT_SLEEP_MINUTES;
 
 // ============================================================
@@ -111,7 +106,7 @@ static uint16_t retrySensirion(Func f, int attempts, uint32_t delayMs) {
   return err;
 }
 
-static void printWakeReason() {
+void printWakeReason() {
   esp_sleep_wakeup_cause_t wakeup_reason = esp_sleep_get_wakeup_cause();
 
   Serial.print("Wake reason: ");
@@ -128,18 +123,18 @@ static void printWakeReason() {
   }
 }
 
-static void printResetReason() {
+void printResetReason() {
   Serial.print("Reset reason CPU0: ");
   Serial.println((int)esp_reset_reason());
 }
 
-static void printRadioLibState(const char* label, int16_t state) {
+void printRadioLibState(const char* label, int16_t state) {
   Serial.print(label);
   Serial.print(" = ");
   Serial.println(state);
 }
 
-static void scanI2C() {
+void scanI2C() {
   Serial.println("Scanning I2C bus...");
   int found = 0;
 
@@ -164,7 +159,7 @@ static void scanI2C() {
 //                 LORAWAN NONCE STORAGE ONLY
 // ============================================================
 
-static void saveNoncesToFlash() {
+void saveNoncesToFlash() {
   if (!node) return;
 
   uint8_t nonceBuf[RADIOLIB_LORAWAN_NONCES_BUF_SIZE];
@@ -177,7 +172,7 @@ static void saveNoncesToFlash() {
   Serial.println("Saved LoRaWAN nonces to flash.");
 }
 
-static bool restoreNoncesFromFlash() {
+bool restoreNoncesFromFlash() {
   if (!node) return false;
 
   store.begin("radiolib", true);
@@ -204,7 +199,7 @@ static bool restoreNoncesFromFlash() {
   return false;
 }
 
-static void clearNoncesInFlash() {
+void clearNoncesInFlash() {
   store.begin("radiolib", false);
   store.remove("nonces");
   store.end();
@@ -256,7 +251,7 @@ static void packPayload(
 //                     RADIO / NODE SETUP
 // ============================================================
 
-static void rebuildLoRaWANNode() {
+void rebuildLoRaWANNode() {
   if (node != nullptr) {
     delete node;
     node = nullptr;
@@ -267,11 +262,12 @@ static void rebuildLoRaWANNode() {
   Serial.println("LoRaWAN node rebuilt.");
 }
 
-static bool initRadio() {
+bool initRadio() {
   SPI.begin(LORA_SCK, LORA_MISO, LORA_MOSI, LORA_CS);
 
   int16_t state = radio.begin(915.0);
-  printRadioLibState("radio.begin()", state);
+  Serial.print("radio.begin() = ");
+  Serial.println(state);
 
   if (state != RADIOLIB_ERR_NONE) {
     return false;
@@ -288,16 +284,8 @@ static bool initRadio() {
   s = radio.setCurrentLimit(140.0);
   printRadioLibState("setCurrentLimit()", s);
 
-  // Heltec V3 SX1262 board typically behaves well at 22 dBm
   s = radio.setOutputPower(22);
   printRadioLibState("setOutputPower()", s);
-
-  // Optional radio defaults matching long-range reliability
-  s = radio.setSpreadingFactor(12);
-  printRadioLibState("setSpreadingFactor()", s);
-
-  s = radio.setBandwidth(125.0);
-  printRadioLibState("setBandwidth()", s);
 
   Serial.println("SX1262 configured.");
   return true;
@@ -307,7 +295,7 @@ static bool initRadio() {
 //                         SENSORS
 // ============================================================
 
-static bool waitForScd41Data(uint32_t timeoutMs = 8000) {
+bool waitForScd41Data(uint32_t timeoutMs = 8000) {
   uint32_t start = millis();
 
   while (millis() - start < timeoutMs) {
@@ -330,25 +318,25 @@ static bool waitForScd41Data(uint32_t timeoutMs = 8000) {
   return false;
 }
 
-static bool initBMP180() {
+bool initBMP180() {
   Serial.print("BMP180 init: ");
   bool ok = bmp.begin();
   Serial.println(ok ? "OK" : "FAIL");
   return ok;
 }
 
-static bool initSCD41() {
+bool initSCD41() {
   scd4x.begin(Wire, SCD4X_ADDR);
   delay(300);
 
-  uint16_t stopErr = retrySensirion(
+  uint16_t err = retrySensirion(
     [&]() { return scd4x.stopPeriodicMeasurement(); },
     3,
     300
   );
 
-  if (stopErr) {
-    printScdError("SCD41 stopPeriodicMeasurement", stopErr);
+  if (err) {
+    printScdError("SCD41 stopPeriodicMeasurement", err);
   }
 
   delay(600);
@@ -360,15 +348,16 @@ static bool initSCD41() {
     400
   );
 
+  if (serialErr) {
+    printScdError("SCD41 getSerialNumber", serialErr);
+  }
+
   Serial.print("SCD41 serial read: ");
   Serial.println(serialErr ? "FAIL" : "OK");
 
-  if (serialErr) {
-    printScdError("SCD41 getSerialNumber", serialErr);
-  } else {
-    Serial.print("SCD41 serial high: 0x");
+  if (!serialErr) {
+    Serial.print("SCD41 serial: 0x");
     Serial.println((unsigned long)(serialNumber >> 32), HEX);
-    Serial.print("SCD41 serial low : 0x");
     Serial.println((unsigned long)(serialNumber & 0xFFFFFFFF), HEX);
   }
 
@@ -390,7 +379,7 @@ static bool initSCD41() {
   return (serialErr == 0) && (startErr == 0);
 }
 
-static bool initSensors() {
+bool initSensors() {
   Wire.begin(SDA_PIN, SCL_PIN);
   Wire.setClock(100000);
   delay(150);
@@ -406,26 +395,46 @@ static bool initSensors() {
   Serial.print("SCD41 overall: ");
   Serial.println(scdOk ? "OK" : "FAIL");
 
-  // Allow operation if at least one sensor works
   return bmpOk || scdOk;
+}
+
+// ============================================================
+//                    BATTERY MEASUREMENT
+// ============================================================
+
+static float readBatteryPercent() {
+  digitalWrite(ADC_CTRL_PIN, HIGH);
+  delay(10);
+
+  int raw = analogRead(BATTERY_PIN);
+
+  float voltage = (raw / 4095.0f) * 3.3f;
+  float batteryVoltage = voltage * BATTERY_DIVIDER_RATIO;
+
+  float percent =
+    ((batteryVoltage - BATTERY_LOW_VOLTAGE) /
+     (BATTERY_HIGH_VOLTAGE - BATTERY_LOW_VOLTAGE)) * 100.0f;
+
+  if (percent < 0.0f) percent = 0.0f;
+  if (percent > 100.0f) percent = 100.0f;
+
+  Serial.print("Battery voltage: ");
+  Serial.print(batteryVoltage, 2);
+  Serial.println(" V");
+
+  Serial.print("Battery percent: ");
+  Serial.print(percent, 1);
+  Serial.println("%");
+
+  digitalWrite(ADC_CTRL_PIN, LOW);
+  return percent;
 }
 
 // ============================================================
 //                  LORAWAN PREPARE / JOIN
 // ============================================================
 
-static bool tryActivateOTAAOnce() {
-  int16_t state = node->activateOTAA();
-  printRadioLibState("activateOTAA()", state);
-
-  bool activated = node->isActivated();
-  Serial.print("node.isActivated() = ");
-  Serial.println(activated ? "true" : "false");
-
-  return activated;
-}
-
-static bool prepareLoRaWAN() {
+bool prepareLoRaWAN() {
   if (!node) {
     Serial.println("LoRaWAN node is null.");
     return false;
@@ -434,8 +443,9 @@ static bool prepareLoRaWAN() {
   Serial.println("Preparing LoRaWAN state...");
   Serial.println("Starting OTAA...");
 
-  int16_t state = node->beginOTAA(joinEUI, devEUI, nullptr, appKey);
-  printRadioLibState("beginOTAA()", state);
+  int16_t state = node->beginOTAA(joinEUI, devEUI, NULL, appKey);
+  Serial.print("beginOTAA() = ");
+  Serial.println(state);
 
   if (state != RADIOLIB_ERR_NONE) {
     return false;
@@ -448,37 +458,32 @@ static bool prepareLoRaWAN() {
   restoreNoncesFromFlash();
   delay(1000);
 
-  for (uint8_t attempt = 1; attempt <= OTAA_JOIN_ATTEMPTS; attempt++) {
-    Serial.print("OTAA attempt ");
-    Serial.print(attempt);
-    Serial.print(" of ");
-    Serial.println(OTAA_JOIN_ATTEMPTS);
+  state = node->activateOTAA();
+  Serial.print("activateOTAA() = ");
+  Serial.println(state);
 
-    if (tryActivateOTAAOnce()) {
-      Serial.println("LoRaWAN active.");
-      saveNoncesToFlash();
-      return true;
-    }
+  bool activated = node->isActivated();
+  Serial.print("node.isActivated() = ");
+  Serial.println(activated ? "true" : "false");
 
-    if (attempt < OTAA_JOIN_ATTEMPTS) {
-      Serial.println("OTAA attempt failed. Waiting before retry...");
-      delay(OTAA_RETRY_DELAY_MS);
-    }
+  if (!activated) {
+    Serial.println("OTAA failed.");
+    return false;
   }
 
-  Serial.println("OTAA failed after all attempts.");
-  return false;
+  Serial.println("LoRaWAN active.");
+  saveNoncesToFlash();
+  return true;
 }
 
 // ============================================================
 //                    SENSOR READ HELPERS
 // ============================================================
 
-static bool readSCD41(float& humidity, uint16_t& co2) {
-  humidity = 0.0f;
-  co2 = 0;
-
+bool readSCD41(float &humidity, uint16_t &co2) {
   if (!scdOk) {
+    humidity = NAN;
+    co2 = 0;
     return false;
   }
 
@@ -505,11 +510,10 @@ static bool readSCD41(float& humidity, uint16_t& co2) {
   return true;
 }
 
-static bool readBMP180(float& bmpTemp, float& pressurePa) {
-  bmpTemp = NAN;
-  pressurePa = NAN;
-
+bool readBMP180(float &bmpTemp, float &pressurePa) {
   if (!bmpOk) {
+    bmpTemp = NAN;
+    pressurePa = NAN;
     return false;
   }
 
@@ -528,51 +532,16 @@ static bool readBMP180(float& bmpTemp, float& pressurePa) {
 }
 
 // ============================================================
-//                    BATTERY MEASUREMENT
-// ============================================================
-
-static float readBatteryPercent() {
-  digitalWrite(ADC_CTRL_PIN, HIGH);
-  delay(10);
-
-  int raw = analogRead(BATTERY_PIN);
-
-  float voltage = (raw / 4095.0f) * 3.3f;
-  float batteryVoltage = voltage * BATTERY_DIVIDER_RATIO;
-
-  float percent =
-    ((batteryVoltage - BATTERY_LOW_VOLTAGE) /
-     (BATTERY_HIGH_VOLTAGE - BATTERY_LOW_VOLTAGE)) * 100.0f;
-
-  if (percent < 0.0f) percent = 0.0f;
-  if (percent > 100.0f) percent = 100.0f;
-
-  Serial.print("Battery raw: ");
-  Serial.println(raw);
-
-  Serial.print("Battery voltage: ");
-  Serial.print(batteryVoltage, 2);
-  Serial.println(" V");
-
-  Serial.print("Battery percent: ");
-  Serial.print(percent, 1);
-  Serial.println("%");
-
-  digitalWrite(ADC_CTRL_PIN, LOW);
-  return percent;
-}
-
-// ============================================================
 //                        UPLINK
 // ============================================================
 
-static bool sendUplinkOnce() {
+bool sendUplinkOnce() {
   if (!node) {
     Serial.println("LoRaWAN node is null.");
     return false;
   }
 
-  Serial.println("---- sendUplinkOnce() ----");
+  Serial.println("---- readAndSend() ----");
   Serial.print("Before uplink, node.isActivated() = ");
   Serial.println(node->isActivated() ? "true" : "false");
 
@@ -628,11 +597,14 @@ static bool sendUplinkOnce() {
   }
 
   Serial.println("Uplink sent.");
-  saveNoncesToFlash();
   return true;
 }
 
-static bool recoverRadioAndSession() {
+bool readAndSend() {
+  if (sendUplinkOnce()) {
+    return true;
+  }
+
   Serial.println("Reinitializing radio and node once...");
 
   if (!initRadio()) {
@@ -642,8 +614,9 @@ static bool recoverRadioAndSession() {
 
   rebuildLoRaWANNode();
 
-  int16_t state = node->beginOTAA(joinEUI, devEUI, nullptr, appKey);
-  printRadioLibState("beginOTAA() after radio reinit", state);
+  int16_t state = node->beginOTAA(joinEUI, devEUI, NULL, appKey);
+  Serial.print("beginOTAA() after radio reinit = ");
+  Serial.println(state);
 
   if (state != RADIOLIB_ERR_NONE) {
     return false;
@@ -656,24 +629,20 @@ static bool recoverRadioAndSession() {
   restoreNoncesFromFlash();
 
   Serial.println("Calling activateOTAA() now...");
-  if (!tryActivateOTAAOnce()) {
+  state = node->activateOTAA();
+  Serial.println("Returned from activateOTAA()");
+  Serial.print("activateOTAA() = ");
+  Serial.println(state);
+
+  Serial.print("node.isActivated() after radio reinit = ");
+  Serial.println(node->isActivated() ? "true" : "false");
+
+  if (!node->isActivated()) {
     Serial.println("Node not active after radio reinit.");
     return false;
   }
 
   saveNoncesToFlash();
-  return true;
-}
-
-static bool readAndSend() {
-  if (sendUplinkOnce()) {
-    return true;
-  }
-
-  if (!recoverRadioAndSession()) {
-    return false;
-  }
-
   return sendUplinkOnce();
 }
 
@@ -686,7 +655,7 @@ void setup() {
   delay(1500);
 
   Serial.println();
-  Serial.println("Booting Heltec V3 sensor node (RadioLib version)...");
+  Serial.println("Booting Heltec V3 sensor node...");
   printResetReason();
   printWakeReason();
 
@@ -702,7 +671,7 @@ void setup() {
   }
 
   bool sensorsAnyOk = initSensors();
-  radioOk = initRadio();
+  bool radioOk = initRadio();
 
   rebuildLoRaWANNode();
 
