@@ -6,7 +6,7 @@
 #include "LoRaWan_APP.h"
 
 #include <Adafruit_BMP085.h>
-#include <SensirionI2CScd4x.h>
+#include <SensirionI2cScd4x.h>
 #include <SensirionCore.h>
 
 // ============================================================
@@ -38,8 +38,8 @@ uint16_t userChannelsMask[6] = { 0xFF00, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000 
 LoRaMacRegion_t loraWanRegion = ACTIVE_REGION;
 DeviceClass_t loraWanClass = CLASS_A;
 
-// Default interval: 10 minutes
-uint32_t appTxDutyCycle = 10UL * 60UL * 1000UL;
+// Default interval: 2 minutes
+uint32_t appTxDutyCycle = 2UL * 60UL * 1000UL;
 
 bool overTheAirActivation = true;
 bool loraWanAdr = false;
