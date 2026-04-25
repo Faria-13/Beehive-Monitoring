@@ -9,6 +9,7 @@
 #include <SensirionI2cScd4x.h>
 #include <SensirionCore.h>
 
+#define ENABLE_ENV_SENSORS 0 // skips all sensor data for testing connection.
 // ============================================================
 //                        OTAA PARAMS
 // ============================================================
