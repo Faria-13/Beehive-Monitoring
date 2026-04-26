@@ -5,13 +5,18 @@
 #include "LoRaWan_APP.h"
 
 // ============================================================
-//                 SENSOR LIBRARIES - ENABLED FOR DEPLOYMENT
+//                 SENSOR ENABLE / DISABLE SWITCH
 // ============================================================
+// 0 = LoRaWAN + battery only. BMP180 and SCD41 are skipped.
+// 1 = Enable BMP180 and SCD41 code again later.
+#define ENABLE_ENV_SENSORS 0
 
-#include <Wire.h>
-#include <Adafruit_BMP085.h>
-#include <SensirionI2cScd4x.h>
-#include <SensirionCore.h>
+#if ENABLE_ENV_SENSORS
+  #include <Wire.h>
+  #include <Adafruit_BMP085.h>
+  #include <SensirionI2cScd4x.h>
+  #include <SensirionCore.h>
+#endif
 
 // ============================================================
 //                        OTAA PARAMS
@@ -30,9 +35,7 @@ uint8_t appEui[] = {
 };
 
 // AppKey from TTN Join settings.
-// Put your real AppKey here before uploading.
-// Format example:
-// 0xAA, 0xBB, 0xCC, ...
+// This key should be regenerated later since it appeared in logs/screenshots.
 uint8_t appKey[] = {
   0xD0, 0xFC, 0xAA, 0x3C,
   0x10, 0xF3, 0x2C, 0x7B,
@@ -83,13 +86,10 @@ bool overTheAirActivation = true;
 bool loraWanAdr = false;
 bool isTxConfirmed = false;
 
-// Sensor uplinks use FPort 1.
 uint8_t appPort = 1;
-
 uint8_t confirmedNbTrials = 4;
 
-// Testing interval: 60 seconds.
-// Deployment interval: change this to 10UL * 60UL * 1000UL.
+// Send every 2 minutes.
 uint32_t appTxDutyCycle = 60UL * 1000UL;
 
 // Downlink command state
@@ -106,12 +106,14 @@ bool debugEnabled = true;
 #define BATTERY_LOW_VOLTAGE 3.10f
 #define BATTERY_HIGH_VOLTAGE 4.20f
 
-// This may need calibration with a multimeter.
+// This may need calibration later.
 #define BATTERY_DIVIDER_RATIO 5.1f
 
 // ============================================================
 //                     SENSOR SETTINGS
 // ============================================================
+
+#if ENABLE_ENV_SENSORS
 
 static const int SDA_PIN = 40;
 static const int SCL_PIN = 39;
@@ -122,10 +124,6 @@ SensirionI2cScd4x scd4x;
 
 bool bmpOk = false;
 bool scdOk = false;
-
-// ============================================================
-//                    SCD41 HELPER FUNCTIONS
-// ============================================================
 
 static void printScdError(const char* where, uint16_t error) {
   if (!error) return;
@@ -155,10 +153,6 @@ static uint16_t retrySensirion(Func f, int attempts, uint32_t delayMs) {
   return err;
 }
 
-// ============================================================
-//                         I2C SCAN
-// ============================================================
-
 static void scanI2C() {
   Serial.println("Scanning I2C bus...");
 
@@ -184,10 +178,6 @@ static void scanI2C() {
     Serial.println("No I2C devices found.");
   }
 }
-
-// ============================================================
-//                     SENSOR INITIALIZATION
-// ============================================================
 
 static bool waitForScd41Data(uint32_t timeoutMs = 8000) {
   uint32_t start = millis();
@@ -282,10 +272,6 @@ static bool initSensors() {
   return bmpOk || scdOk;
 }
 
-// ============================================================
-//                       SENSOR READS
-// ============================================================
-
 static bool readSCD41(float& humidity, uint16_t& co2) {
   humidity = 0.0f;
   co2 = 0;
@@ -326,7 +312,6 @@ static bool readBMP180(float& bmpTempC, float& pressurePa) {
     return false;
   }
 
-  // BMP180 library returns Celsius here.
   bmpTempC = bmp.readTemperature();
   pressurePa = (float)bmp.readPressure();
 
@@ -340,6 +325,8 @@ static bool readBMP180(float& bmpTempC, float& pressurePa) {
 
   return true;
 }
+
+#endif
 
 // ============================================================
 //                    BATTERY MEASUREMENT
@@ -384,18 +371,11 @@ static float readBatteryPercent() {
 // ============================================================
 //                           PAYLOAD
 // ============================================================
-//
-// Payload format, 10 bytes total:
-//
-// [0..1] CO2 ppm, uint16 little-endian
-// [2..3] battery %, value * 100, int16 little-endian
-// [4..5] humidity %, value * 100, uint16 little-endian
-// [6..7] BMP180 temperature Celsius, value * 100, int16 little-endian
-// [8..9] pressure hPa, value * 10, uint16 little-endian
-//
-// Important:
-// Temperature is Celsius only.
-// No Fahrenheit conversion happens anywhere in this payload.
+// [0..1] CO2 ppm, uint16 LE
+// [2..3] battery %, value *100, int16 LE
+// [4..5] humidity %, value *100, uint16 LE
+// [6..7] BMP180 temp F, value *100, int16 LE
+// [8..9] pressure hPa, value *10, uint16 LE
 
 static void packPayload(
   uint8_t* payload,
@@ -405,12 +385,11 @@ static void packPayload(
   float bmpTempC,
   float bmpPressurePa
 ) {
+  float tempF = (bmpTempC * 9.0f / 5.0f) + 32.0f;
+
   int16_t battPct = (int16_t)lroundf(batteryPercent * 100.0f);
   uint16_t hum = (uint16_t)lroundf(rh * 100.0f);
-
-  // Celsius packed as temp C * 100.
-  // Example: 21.80 C -> 2180 -> 0x0884 -> bytes 84 08.
-  int16_t bmpTempCPacked = (int16_t)lroundf(bmpTempC * 100.0f);
+  int16_t bmpT = (int16_t)lroundf(tempF * 100.0f);
 
   float pressureHpa = bmpPressurePa / 100.0f;
   uint16_t bmpP = (uint16_t)lroundf(pressureHpa * 10.0f);
@@ -424,27 +403,11 @@ static void packPayload(
   payload[4] = hum & 0xFF;
   payload[5] = (hum >> 8) & 0xFF;
 
-  payload[6] = bmpTempCPacked & 0xFF;
-  payload[7] = (bmpTempCPacked >> 8) & 0xFF;
+  payload[6] = bmpT & 0xFF;
+  payload[7] = (bmpT >> 8) & 0xFF;
 
   payload[8] = bmpP & 0xFF;
   payload[9] = (bmpP >> 8) & 0xFF;
-
-  Serial.println("Packed payload values:");
-  Serial.print("  CO2 ppm: ");
-  Serial.println(co2);
-
-  Serial.print("  Battery %: ");
-  Serial.println(battPct / 100.0f, 2);
-
-  Serial.print("  Humidity %: ");
-  Serial.println(hum / 100.0f, 2);
-
-  Serial.print("  BMP180 temp C: ");
-  Serial.println(bmpTempCPacked / 100.0f, 2);
-
-  Serial.print("  Pressure hPa: ");
-  Serial.println(bmpP / 10.0f, 1);
 }
 
 // ============================================================
@@ -459,6 +422,7 @@ static void prepareTxFrame(uint8_t port) {
   float bmpTempC = 0.0f;
   float pressurePa = 0.0f;
 
+#if ENABLE_ENV_SENSORS
   bool scdReadOk = readSCD41(humidity, co2);
   bool bmpReadOk = readBMP180(bmpTempC, pressurePa);
 
@@ -473,19 +437,14 @@ static void prepareTxFrame(uint8_t port) {
     co2 = 0;
     humidity = 0.0f;
   }
+#else
+  Serial.println("Environmental sensors disabled. Sending zero fallback sensor values.");
+#endif
 
   float batteryPercent = readBatteryPercent();
 
   appDataSize = 10;
-
-  packPayload(
-    appData,
-    co2,
-    batteryPercent,
-    humidity,
-    bmpTempC,
-    pressurePa
-  );
+  packPayload(appData, co2, batteryPercent, humidity, bmpTempC, pressurePa);
 
   Serial.print("Payload bytes: ");
 
@@ -504,16 +463,14 @@ static void prepareTxFrame(uint8_t port) {
 // ============================================================
 //                    REAL DOWNLINK HANDLER
 // ============================================================
-//
 // Send downlinks from TTN on FPort 2.
 //
 // Commands:
-//
 // 01          = restart node
 // 02 MM       = set uplink interval to MM minutes
 // 03          = send another uplink soon
-// 04 00       = disable debug flag
-// 04 01       = enable debug flag
+// 04 00       = disable debug prints
+// 04 01       = enable debug prints
 
 void downLinkDataHandle(McpsIndication_t *mcpsIndication) {
   if (mcpsIndication == nullptr) {
@@ -540,8 +497,6 @@ void downLinkDataHandle(McpsIndication_t *mcpsIndication) {
 
   Serial.println();
 
-  // Only FPort 2 is allowed to control the node.
-  // FPort 1 stays reserved for sensor uplinks.
   if (mcpsIndication->Port != 2) {
     Serial.println("Ignoring downlink because command port is not FPort 2.");
     return;
@@ -596,7 +551,7 @@ void downLinkDataHandle(McpsIndication_t *mcpsIndication) {
 
       debugEnabled = mcpsIndication->Buffer[1] != 0;
 
-      Serial.print("Command 0x04: Debug flag ");
+      Serial.print("Command 0x04: Debug prints ");
       Serial.println(debugEnabled ? "enabled" : "disabled");
 
       break;
@@ -631,14 +586,17 @@ void setup() {
 
   Serial.println();
   Serial.println("====================================");
-  Serial.println(" Heltec LoRaWAN deployment build");
-  Serial.println(" BMP180 and SCD41 sensors enabled");
-  Serial.println(" Temperature payload uses Celsius");
+  Serial.println(" Heltec LoRaWAN test");
+  Serial.println(" BMP180/SCD41 disabled for now");
   Serial.println(" Downlink commands enabled on FPort 2");
   Serial.println("====================================");
 
-  Serial.println("Environmental sensors enabled. Starting I2C scan, BMP180, and SCD41.");
+#if ENABLE_ENV_SENSORS
+  Serial.println("Environmental sensors enabled.");
   initSensors();
+#else
+  Serial.println("Environmental sensors disabled. Skipping I2C scan, BMP180, and SCD41.");
+#endif
 
   Mcu.begin(HELTEC_BOARD, SLOW_CLK_TPYE);
 }
@@ -673,8 +631,9 @@ void loop() {
       prepareTxFrame(appPort);
       LoRaWAN.send();
 
-      // Do not manually call downLinkDataHandle() here.
-      // The Heltec LoRaWAN library calls it when a real downlink arrives.
+      // Do not manually call the downlink handler here.
+      // The Heltec LoRaWAN library calls downLinkDataHandle()
+      // only when a real downlink is received.
 
       deviceState = DEVICE_STATE_CYCLE;
       break;
