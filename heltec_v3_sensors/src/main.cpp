@@ -30,9 +30,7 @@ uint8_t appEui[] = {
 };
 
 // AppKey from TTN Join settings.
-// Put your real AppKey here before uploading.
-// Format example:
-// 0xAA, 0xBB, 0xCC, ...
+// This has NOT been changed from the code you provided.
 uint8_t appKey[] = {
   0xD0, 0xFC, 0xAA, 0x3C,
   0x10, 0xF3, 0x2C, 0x7B,
@@ -83,18 +81,32 @@ bool overTheAirActivation = true;
 bool loraWanAdr = false;
 bool isTxConfirmed = false;
 
-// Sensor uplinks use FPort 1.
-uint8_t appPort = 1;
+static const uint8_t SENSOR_UPLINK_PORT = 1;
+static const uint8_t COMMAND_DOWNLINK_PORT = 2;
+static const uint8_t ACK_UPLINK_PORT = 3;
+
+// Normal sensor uplinks use FPort 1.
+// Downlink ACK uplinks use FPort 3.
+uint8_t appPort = SENSOR_UPLINK_PORT;
 
 uint8_t confirmedNbTrials = 4;
 
 // Testing interval: 60 seconds.
 // Deployment interval: change this to 10UL * 60UL * 1000UL.
-uint32_t appTxDutyCycle = 60UL * 1000UL;
+uint32_t appTxDutyCycle = 10UL * 60UL * 1000UL;
 
 // Downlink command state
 bool sendNowRequested = false;
 bool debugEnabled = true;
+
+// Application-level ACK state for downlinks.
+bool downlinkAckPending = false;
+bool restartAfterAck = false;
+bool lastTxWasAck = false;
+
+uint8_t lastDownlinkCommand = 0x00;
+uint8_t lastDownlinkStatus = 0x00;
+uint8_t downlinkAckCounter = 0;
 
 // ============================================================
 //                     BATTERY SETTINGS
@@ -382,20 +394,16 @@ static float readBatteryPercent() {
 }
 
 // ============================================================
-//                           PAYLOAD
+//                           SENSOR PAYLOAD
 // ============================================================
 //
-// Payload format, 10 bytes total:
+// Sensor payload format, 10 bytes total, sent on FPort 1:
 //
 // [0..1] CO2 ppm, uint16 little-endian
 // [2..3] battery %, value * 100, int16 little-endian
 // [4..5] humidity %, value * 100, uint16 little-endian
 // [6..7] BMP180 temperature Celsius, value * 100, int16 little-endian
 // [8..9] pressure hPa, value * 10, uint16 little-endian
-//
-// Important:
-// Temperature is Celsius only.
-// No Fahrenheit conversion happens anywhere in this payload.
 
 static void packPayload(
   uint8_t* payload,
@@ -430,7 +438,7 @@ static void packPayload(
   payload[8] = bmpP & 0xFF;
   payload[9] = (bmpP >> 8) & 0xFF;
 
-  Serial.println("Packed payload values:");
+  Serial.println("Packed sensor payload values:");
   Serial.print("  CO2 ppm: ");
   Serial.println(co2);
 
@@ -448,11 +456,57 @@ static void packPayload(
 }
 
 // ============================================================
+//                     DOWNLINK ACK PAYLOAD
+// ============================================================
+//
+// ACK payload format, 4 bytes total, sent on FPort 3:
+//
+// [0] 0xAC = ACK marker
+// [1] command received
+// [2] status: 0x00 = OK, 0x01 = error
+// [3] ACK counter
+
+static void prepareDownlinkAckFrame() {
+  appDataSize = 4;
+
+  // ACK payload:
+  // [0] 0xAC = ACK marker
+  // [1] command received
+  // [2] status: 0 = OK, 1 = error
+  // [3] ACK counter
+
+  appData[0] = 0xAC;
+  appData[1] = lastDownlinkCommand;
+  appData[2] = lastDownlinkStatus;
+  appData[3] = downlinkAckCounter++;
+
+  Serial.println("Preparing downlink ACK uplink...");
+  Serial.print("ACK payload: ");
+
+  for (uint8_t i = 0; i < appDataSize; i++) {
+    if (appData[i] < 16) Serial.print("0");
+    Serial.print(appData[i], HEX);
+    Serial.print(" ");
+  }
+
+  Serial.println();
+}
+
+// ============================================================
 //                     LORAWAN PAYLOAD HOOK
 // ============================================================
 
 static void prepareTxFrame(uint8_t port) {
   (void)port;
+
+  if (downlinkAckPending) {
+    downlinkAckPending = false;
+    lastTxWasAck = true;
+    prepareDownlinkAckFrame();
+    return;
+  }
+
+  lastTxWasAck = false;
 
   uint16_t co2 = 0;
   float humidity = 0.0f;
@@ -487,8 +541,7 @@ static void prepareTxFrame(uint8_t port) {
     pressurePa
   );
 
-  Serial.print("Payload bytes: ");
-
+  Serial.print("Sensor payload bytes: ");
   for (size_t i = 0; i < appDataSize; i++) {
     if (appData[i] < 16) {
       Serial.print("0");
@@ -497,7 +550,6 @@ static void prepareTxFrame(uint8_t port) {
     Serial.print(appData[i], HEX);
     Serial.print(" ");
   }
-
   Serial.println();
 }
 
@@ -509,11 +561,33 @@ static void prepareTxFrame(uint8_t port) {
 //
 // Commands:
 //
-// 01          = restart node
-// 02 MM       = set uplink interval to MM minutes
-// 03          = send another uplink soon
-// 04 00       = disable debug flag
-// 04 01       = enable debug flag
+// 01          = restart node after ACK uplink
+// 02 MM       = set uplink interval to MM minutes, then ACK
+// 03          = send ACK/read-now uplink soon
+// 04 00       = disable debug flag, then ACK
+// 04 01       = enable debug flag, then ACK
+
+static void queueDownlinkAck(uint8_t command, uint8_t status, bool restartAfterThisAck) {
+  lastDownlinkCommand = command;
+  lastDownlinkStatus = status;
+  downlinkAckPending = true;
+  restartAfterAck = restartAfterThisAck;
+  sendNowRequested = true;
+
+  Serial.println("Downlink ACK queued.");
+  Serial.print("  command: 0x");
+  if (command < 16) {
+    Serial.print("0");
+  }
+  Serial.println(command, HEX);
+
+  Serial.print("  status: ");
+  Serial.println(status == 0x00 ? "OK" : "ERROR");
+
+  if (restartAfterThisAck) {
+    Serial.println("  restart will happen after ACK uplink is sent");
+  }
+}
 
 void downLinkDataHandle(McpsIndication_t *mcpsIndication) {
   if (mcpsIndication == nullptr) {
@@ -540,9 +614,7 @@ void downLinkDataHandle(McpsIndication_t *mcpsIndication) {
 
   Serial.println();
 
-  // Only FPort 2 is allowed to control the node.
-  // FPort 1 stays reserved for sensor uplinks.
-  if (mcpsIndication->Port != 2) {
+  if (mcpsIndication->Port != COMMAND_DOWNLINK_PORT) {
     Serial.println("Ignoring downlink because command port is not FPort 2.");
     return;
   }
@@ -551,15 +623,17 @@ void downLinkDataHandle(McpsIndication_t *mcpsIndication) {
 
   switch (command) {
     case 0x01: {
-      Serial.println("Command 0x01: Restarting node...");
-      delay(1000);
-      ESP.restart();
+      Serial.println("Command 0x01 received: restart requested.");
+      Serial.println("Will send ACK uplink first, then restart.");
+
+      queueDownlinkAck(0x01, 0x00, true);
       break;
     }
 
     case 0x02: {
       if (mcpsIndication->BufferSize < 2) {
         Serial.println("Command 0x02 error: missing minutes byte.");
+        queueDownlinkAck(0x02, 0x01, false);
         break;
       }
 
@@ -579,18 +653,21 @@ void downLinkDataHandle(McpsIndication_t *mcpsIndication) {
       Serial.print(minutes);
       Serial.println(" minute(s)");
 
+      queueDownlinkAck(0x02, 0x00, false);
       break;
     }
 
     case 0x03: {
-      Serial.println("Command 0x03: Send-another-uplink-soon requested.");
-      sendNowRequested = true;
+      Serial.println("Command 0x03 received: read-now / ACK-now requested.");
+
+      queueDownlinkAck(0x03, 0x00, false);
       break;
     }
 
     case 0x04: {
       if (mcpsIndication->BufferSize < 2) {
         Serial.println("Command 0x04 error: missing debug byte.");
+        queueDownlinkAck(0x04, 0x01, false);
         break;
       }
 
@@ -599,6 +676,7 @@ void downLinkDataHandle(McpsIndication_t *mcpsIndication) {
       Serial.print("Command 0x04: Debug flag ");
       Serial.println(debugEnabled ? "enabled" : "disabled");
 
+      queueDownlinkAck(0x04, 0x00, false);
       break;
     }
 
@@ -610,6 +688,8 @@ void downLinkDataHandle(McpsIndication_t *mcpsIndication) {
       }
 
       Serial.println(command, HEX);
+
+      queueDownlinkAck(command, 0x01, false);
       break;
     }
   }
@@ -635,6 +715,7 @@ void setup() {
   Serial.println(" BMP180 and SCD41 sensors enabled");
   Serial.println(" Temperature payload uses Celsius");
   Serial.println(" Downlink commands enabled on FPort 2");
+  Serial.println(" Downlink ACK uplinks enabled on FPort 3");
   Serial.println("====================================");
 
   Serial.println("Environmental sensors enabled. Starting I2C scan, BMP180, and SCD41.");
@@ -669,12 +750,23 @@ void loop() {
     }
 
     case DEVICE_STATE_SEND: {
-      Serial.println("Preparing uplink...");
+      if (downlinkAckPending) {
+        appPort = ACK_UPLINK_PORT;
+      } else {
+        appPort = SENSOR_UPLINK_PORT;
+      }
+
+      Serial.print("Preparing uplink on FPort ");
+      Serial.println(appPort);
+
       prepareTxFrame(appPort);
       LoRaWAN.send();
 
-      // Do not manually call downLinkDataHandle() here.
-      // The Heltec LoRaWAN library calls it when a real downlink arrives.
+      if (lastTxWasAck && restartAfterAck) {
+        Serial.println("Downlink ACK uplink sent. Restarting module now...");
+        delay(3000);
+        ESP.restart();
+      }
 
       deviceState = DEVICE_STATE_CYCLE;
       break;
